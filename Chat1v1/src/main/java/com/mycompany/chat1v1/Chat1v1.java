@@ -11,6 +11,6 @@ package com.mycompany.chat1v1;
 public class Chat1v1 {
 
     public static void main(String[] args) {
-        System.out.println("Hello World!");
+        System.out.println("Khoi tao thanh cong !!!");
     }
 }
