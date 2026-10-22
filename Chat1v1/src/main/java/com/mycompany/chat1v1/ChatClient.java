@@ -6,33 +6,93 @@ package com.mycompany.chat1v1;
 
 /**
  *
- * @author TienDat
+ * @author PhuongUyen
  */
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.io.IOException;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.util.Scanner;
 
 public class ChatClient {
-     public static void main(String[] args) {
-        String host = "localhost";
-        int port = 5000;
+     private static final String HOST = "localhost";
+    private static final int PORT = 5000;
 
-        try (Socket socket = new Socket(host, port);
-             BufferedReader in = new BufferedReader(
-                     new InputStreamReader(
-                             socket.getInputStream()));
-             PrintWriter out = new PrintWriter(
-                     socket.getOutputStream(), true)) {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
 
-            System.out.println("Ket noi Server thanh cong!");
+        System.out.print("Nhap ten dang nhap: ");
+        String username = scanner.nextLine().trim();
 
-            out.println("Xin chao Server!");
+        if (username.isEmpty() || username.contains(" ")
+                || username.contains("|")) {
+            System.out.println("Ten dang nhap khong hop le.");
+            return;
+        }
+
+        try (Socket socket = new Socket(HOST, PORT);
+             BufferedReader in = new BufferedReader(new InputStreamReader(
+                     socket.getInputStream(), StandardCharsets.UTF_8));
+             PrintWriter out = new PrintWriter(socket.getOutputStream(),
+                     true, StandardCharsets.UTF_8)) {
+
+            // Gui thong tin dang nhap
+            out.println("LOGIN " + username);
 
             String response = in.readLine();
 
-            System.out.println("Server phan hoi: " + response);
+            if (response == null || !response.startsWith("OK|")) {
+                System.out.println(response == null
+                        ? "Server da dong ket noi."
+                        : response.replace("|", ": "));
+                return;
+            }
+
+            System.out.println(response.substring(3));
+            System.out.println("Ban co the bat dau nhan tin.");
+
+            // Luong rieng de lien tuc nhan tin nhan tu Server
+            Thread receiverThread = new Thread(() -> {
+                try {
+                    String incoming;
+
+                    while ((incoming = in.readLine()) != null) {
+                        String[] parts = incoming.split("\\|", 3);
+
+                        if (parts.length >= 2 && parts[0].equals("MSG")) {
+                            String sender = parts[1];
+                            String content = parts.length == 3 ? parts[2] : "";
+                            System.out.println("\n[" + sender + "]: " + content);
+                            System.out.print("Ban: ");
+                        } else if (parts.length >= 2) {
+                            System.out.println("\n" + parts[1]);
+                            System.out.print("Ban: ");
+                        } else {
+                            System.out.println("\n" + incoming);
+                            System.out.print("Ban: ");
+                        }
+                    }
+                } catch (IOException e) {
+                    System.out.println("\nMat ket noi voi Server.");
+                }
+            });
+
+            receiverThread.setDaemon(true);
+            receiverThread.start();
+
+            // Doc tin nhan tu ban phim va gui den Server
+            while (true) {
+                System.out.print("Ban: ");
+                String message = scanner.nextLine();
+
+                out.println(message);
+
+                if (message.equalsIgnoreCase("/quit")) {
+                    break;
+                }
+            }
 
         } catch (IOException e) {
             System.out.println("Khong the ket noi Server: "
