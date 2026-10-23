@@ -9,8 +9,11 @@ package com.mycompany.chat1v1;
  * @author PhuongUyen
  */
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -83,16 +86,46 @@ public class ChatClient {
             receiverThread.start();
 
             // Doc tin nhan tu ban phim va gui den Server
-            while (true) {
-                System.out.print("Ban: ");
-                String message = scanner.nextLine();
+            // Doc tin nhan tu ban phim va gui den Server
+              while (true) {
+                  System.out.print("Ban: ");
+                  String message = scanner.nextLine();
 
-                out.println(message);
+                  if (message.startsWith("@file ")) {
+                      // Cú pháp console: @file Bob C:\path\to\file.txt
+                      String[] parts = message.split(" ", 3);
+                      if (parts.length < 3) {
+                          System.out.println("Sai cu phap. Vi du: @file Bob C:/file.txt");
+                          continue;
+                      }
+                      String receiver = parts[1];
+                      File fileToSend = new File(parts[2]);
+                      if (!fileToSend.exists()) {
+                          System.out.println("File khong ton tai!");
+                          continue;
+                      }
 
-                if (message.equalsIgnoreCase("/quit")) {
-                    break;
-                }
-            }
+                      out.println("@file " + receiver + " " + fileToSend.getName() + " " + fileToSend.length());
+                      
+                      OutputStream rawOut = socket.getOutputStream();
+                      FileInputStream fis = new FileInputStream(fileToSend);
+                      byte[] buffer = new byte[4096];
+                      int bytesRead;
+                      while ((bytesRead = fis.read(buffer)) != -1) {
+                          rawOut.write(buffer, 0, bytesRead);
+                      }
+                      rawOut.flush();
+                      fis.close();
+                      System.out.println("Da gui file thanh cong!");
+                      continue;
+                  }
+
+                  out.println(message);
+
+                  if (message.equalsIgnoreCase("/quit")) {
+                      break;
+                  }
+              }
 
         } catch (IOException e) {
             System.out.println("Khong the ket noi Server: "

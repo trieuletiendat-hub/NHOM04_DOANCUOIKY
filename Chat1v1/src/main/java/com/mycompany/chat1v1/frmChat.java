@@ -4,6 +4,16 @@
  */
 package com.mycompany.chat1v1;
 
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import javax.swing.JFileChooser;
+import javax.swing.JOptionPane;
+
 /**
  *
  * @author Nguyen Bich Anh
@@ -13,6 +23,7 @@ public class frmChat extends javax.swing.JFrame {
     private java.io.BufferedReader in;
     private java.io.PrintWriter out;
     private String username;
+    private DataOutputStream dos;
 
     private final javax.swing.DefaultListModel<String> userModel = new javax.swing.DefaultListModel<>();
     private boolean closing = false;
@@ -24,7 +35,7 @@ public class frmChat extends javax.swing.JFrame {
     }
     
     public frmChat(
-        String username,
+      String username,
         java.net.Socket socket,
         java.io.BufferedReader in,
         java.io.PrintWriter out,
@@ -34,6 +45,12 @@ public class frmChat extends javax.swing.JFrame {
         this.socket = socket;
         this.in = in;
         this.out = out;
+        
+        try {
+            this.dos = new DataOutputStream(socket.getOutputStream()); // Khởi tạo luồng ghi nhị phân
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
         initComponents();
 
@@ -93,14 +110,86 @@ public class frmChat extends javax.swing.JFrame {
         receiverThread.setDaemon(true);
         receiverThread.start();
     }
-
+private void receiveFile(String sender, String fileName, long fileSize) {
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            JFileChooser saveChooser = new JFileChooser();
+            saveChooser.setSelectedFile(new File(fileName));
+            int option = saveChooser.showSaveDialog(this);
+            
+            if (option == JFileChooser.APPROVE_OPTION) {
+                File savedFile = saveChooser.getSelectedFile();
+                
+                new Thread(() -> {
+                    try {
+                        InputStream rawIn = socket.getInputStream();
+                        FileOutputStream fos = new FileOutputStream(savedFile);
+                        byte[] buffer = new byte[4096];
+                        long totalRead = 0;
+                        int bytesRead;
+                        
+                        while (totalRead < fileSize) {
+                            int bytesToRead = (int) Math.min(buffer.length, fileSize - totalRead);
+                            bytesRead = rawIn.read(buffer, 0, bytesToRead);
+                            if (bytesRead == -1) break;
+                            
+                            fos.write(buffer, 0, bytesRead);
+                            totalRead += bytesRead;
+                        }
+                        fos.close();
+                        
+                        javax.swing.SwingUtilities.invokeLater(() -> {
+                            appendMessage("[Hệ thống] Đã nhận file từ [" + sender + "]. Lưu tại: " + savedFile.getAbsolutePath());
+                            javax.swing.JOptionPane.showMessageDialog(this, "Tải file thành công:\n" + savedFile.getAbsolutePath());
+                        });
+                        
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        javax.swing.SwingUtilities.invokeLater(() -> {
+                            javax.swing.JOptionPane.showMessageDialog(this, "Lỗi khi lưu file: " + e.getMessage());
+                        });
+                    }
+                }).start();
+                
+            } else {
+                // Nếu hủy, đọc bỏ số byte dữ liệu đang chờ trên socket để không làm lệch buffer
+                new Thread(() -> {
+                    try {
+                        InputStream rawIn = socket.getInputStream();
+                        byte[] buffer = new byte[4096];
+                        long totalRead = 0;
+                        while (totalRead < fileSize) {
+                            int bytesToRead = (int) Math.min(buffer.length, fileSize - totalRead);
+                            int read = rawIn.read(buffer, 0, bytesToRead);
+                            if (read == -1) break;
+                            totalRead += read;
+                        }
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }).start();
+                
+                appendMessage("[Hệ thống] Bạn đã hủy nhận file từ " + sender);
+            }
+        });
+    }
     private void processMessage(String incoming) {
-        String[] parts = incoming.split("\\|", 3);
+        String[] parts = incoming.split("\\|", 4); // Cho phép tách tối đa 4 phần
 
         switch (parts[0]) {
             case "MSG":
                 if (parts.length >= 3) {
                     appendMessage("[" + parts[1] + "] " + parts[2]);
+                }
+                break;
+
+            // Xử lý khi có người gửi file đến
+            case "FILE_START":
+                if (parts.length >= 4) {
+                    String sender = parts[1];
+                    String fileName = parts[2];
+                    long fileSize = Long.parseLong(parts[3]);
+                    
+                    receiveFile(sender, fileName, fileSize);
                 }
                 break;
 
@@ -251,6 +340,7 @@ public class frmChat extends javax.swing.JFrame {
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
+        jColorChooser1 = new javax.swing.JColorChooser();
         lblTitle = new javax.swing.JLabel();
         lblCurrentUser = new javax.swing.JLabel();
         lblStatus = new javax.swing.JLabel();
@@ -265,6 +355,7 @@ public class frmChat extends javax.swing.JFrame {
         btnLogout = new javax.swing.JButton();
         btnSend = new javax.swing.JButton();
         jSeparator1 = new javax.swing.JSeparator();
+        btnSendFile = new javax.swing.JButton();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -301,18 +392,17 @@ public class frmChat extends javax.swing.JFrame {
         btnSend.setFont(new java.awt.Font("Segoe UI", 0, 14)); // NOI18N
         btnSend.setText("Gửi");
 
+        btnSendFile.setText("File");
+        btnSendFile.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnSendFileActionPerformed(evt);
+            }
+        });
+
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(layout.createSequentialGroup()
-                .addContainerGap()
-                .addComponent(jSeparator1)
-                .addContainerGap())
-            .addGroup(layout.createSequentialGroup()
-                .addGap(237, 237, 237)
-                .addComponent(lblTitle)
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
             .addGroup(layout.createSequentialGroup()
                 .addGap(23, 23, 23)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -325,28 +415,42 @@ public class frmChat extends javax.swing.JFrame {
                             .addComponent(lblUsersTitle)
                             .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 131, javax.swing.GroupLayout.PREFERRED_SIZE))
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                                .addComponent(lblStatus)
-                                .addGap(41, 41, 41))
                             .addGroup(layout.createSequentialGroup()
                                 .addGap(41, 41, 41)
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                    .addComponent(lblConversation)
-                                    .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 441, javax.swing.GroupLayout.PREFERRED_SIZE)
                                     .addGroup(layout.createSequentialGroup()
-                                        .addComponent(txtMessage, javax.swing.GroupLayout.DEFAULT_SIZE, 272, Short.MAX_VALUE)
-                                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                                        .addComponent(txtMessage, javax.swing.GroupLayout.DEFAULT_SIZE, 301, Short.MAX_VALUE)
+                                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                         .addComponent(btnSend)
                                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                        .addComponent(btnLogout)))
-                                .addGap(16, 16, 16))))))
+                                        .addComponent(btnSendFile))
+                                    .addComponent(lblConversation)
+                                    .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 441, javax.swing.GroupLayout.PREFERRED_SIZE))
+                                .addGap(16, 16, 16))
+                            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                .addComponent(lblStatus)
+                                .addGap(41, 41, 41))))))
+            .addGroup(layout.createSequentialGroup()
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(layout.createSequentialGroup()
+                        .addContainerGap()
+                        .addComponent(jSeparator1))
+                    .addGroup(layout.createSequentialGroup()
+                        .addGap(237, 237, 237)
+                        .addComponent(lblTitle)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addComponent(btnLogout, javax.swing.GroupLayout.PREFERRED_SIZE, 95, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                .addContainerGap())
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
-                .addGap(14, 14, 14)
-                .addComponent(lblTitle)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(layout.createSequentialGroup()
+                        .addGap(14, 14, 14)
+                        .addComponent(lblTitle))
+                    .addComponent(btnLogout))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(lblCurrentUser)
@@ -365,13 +469,67 @@ public class frmChat extends javax.swing.JFrame {
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(btnRefresh)
                     .addComponent(txtMessage, javax.swing.GroupLayout.PREFERRED_SIZE, 40, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(btnLogout)
-                    .addComponent(btnSend))
+                    .addComponent(btnSend)
+                    .addComponent(btnSendFile))
                 .addGap(16, 16, 16))
         );
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
+
+    private void btnSendFileActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnSendFileActionPerformed
+      String receiver = lstUsers.getSelectedValue();
+        if (receiver == null) {
+            javax.swing.JOptionPane.showMessageDialog(this, "Vui lòng chọn người nhận trước khi gửi file.");
+            return;
+        }
+
+        if (receiver.equals(username)) {
+            javax.swing.JOptionPane.showMessageDialog(this, "Bạn không thể gửi file cho chính mình.");
+            return;
+        }
+
+        JFileChooser fileChooser = new JFileChooser();
+        int result = fileChooser.showOpenDialog(this);
+        
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File fileToSend = fileChooser.getSelectedFile();
+            
+            new Thread(() -> {
+                try {
+                    if (socket == null || socket.isClosed()) {
+                        javax.swing.JOptionPane.showMessageDialog(frmChat.this, "Chưa kết nối tới server!");
+                        return;
+                    }
+                    
+                    // Gửi header thông báo qua PrintWriter (out)
+                    out.println("@file " + receiver + " " + fileToSend.getName() + " " + fileToSend.length());
+                    
+                    // Đẩy luồng byte dữ liệu qua OutputStream của socket
+                        OutputStream rawOut = socket.getOutputStream();
+                    FileInputStream fis = new FileInputStream(fileToSend);
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+                    
+                    while ((bytesRead = fis.read(buffer)) != -1) {
+                        rawOut.write(buffer, 0, bytesRead);
+                    }
+                    rawOut.flush();
+                    fis.close();
+                    
+                    javax.swing.SwingUtilities.invokeLater(() -> {
+                        appendMessage("[Bạn → " + receiver + "] Đã gửi file thành công: " + fileToSend.getName());
+                    });
+                    
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    javax.swing.SwingUtilities.invokeLater(() -> {
+                        javax.swing.JOptionPane.showMessageDialog(frmChat.this, "Lỗi khi gửi file: " + e.getMessage());
+                    });
+                }
+            }).start();
+        }
+    }//GEN-LAST:event_btnSendFileActionPerformed
 
     /**
      * @param args the command line arguments
@@ -412,6 +570,8 @@ public class frmChat extends javax.swing.JFrame {
     private javax.swing.JButton btnLogout;
     private javax.swing.JButton btnRefresh;
     private javax.swing.JButton btnSend;
+    private javax.swing.JButton btnSendFile;
+    private javax.swing.JColorChooser jColorChooser1;
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JScrollPane jScrollPane2;
     private javax.swing.JSeparator jSeparator1;
