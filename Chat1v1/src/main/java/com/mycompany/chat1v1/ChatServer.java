@@ -59,12 +59,11 @@ public class ChatServer {
         public void run() {
             try {
                 in = new BufferedReader(new InputStreamReader(
-                        socket.getInputStream(), StandardCharsets.UTF_8));
+                    socket.getInputStream(), StandardCharsets.UTF_8));
 
                 out = new PrintWriter(socket.getOutputStream(), true,
-                        StandardCharsets.UTF_8);
+                    StandardCharsets.UTF_8);
 
-                // Nhan ten dang nhap tu Client
                 String login = in.readLine();
 
                 if (login == null || !login.startsWith("LOGIN ")) {
@@ -72,59 +71,78 @@ public class ChatServer {
                     return;
                 }
 
-                username = login.substring(6).trim();
+            username = login.substring(6).trim();
 
-                if (username.isEmpty() || username.contains("|")
-                        || username.contains(" ")) {
-                    out.println("ERROR|Ten dang nhap khong hop le.");
-                    return;
+            if (username.isEmpty() || username.contains("|")
+                || username.contains(" ")) {
+                out.println("ERROR|Ten dang nhap khong hop le.");
+                return;
+            }
+
+            if (clients.putIfAbsent(username, this) != null) {
+                out.println("ERROR|Ten nguoi dung da ton tai.");
+                return;
+            }
+
+            out.println("OK|Dang nhap thanh cong voi ten " + username);
+            out.println("INFO|Nhap @tenNguoiNhan noiDungDeGui de nhan tin.");
+            out.println("INFO|Vi du: @Bob Xin chao Bob!");
+            out.println("INFO|Nhap /users de xem danh sach nguoi dung.");
+            out.println("INFO|Nhap /quit de thoat.");
+
+            System.out.println(username + " da dang nhap.");
+            broadcastUserList();
+
+            String message;
+
+            while ((message = in.readLine()) != null) {
+                if (message.equalsIgnoreCase("/quit")) {
+                    break;
                 }
 
-                // Khong cho hai Client dung cung ten
-                if (clients.putIfAbsent(username, this) != null) {
-                    out.println("ERROR|Ten nguoi dung da ton tai.");
-                    return;
+                if (message.equalsIgnoreCase("/users")) {
+                    out.println("INFO|Nguoi dung dang online: "
+                            + String.join(", ", clients.keySet()));
+                    continue;
                 }
 
-                out.println("OK|Dang nhap thanh cong voi ten " + username);
-                out.println("INFO|Nhap @tenNguoiNhan noiDungDeGui de nhan tin.");
-                out.println("INFO|Vi du: @Bob Xin chao Bob!");
-                out.println("INFO|Nhap /users de xem danh sach nguoi dung.");
-                out.println("INFO|Nhap /quit de thoat.");
+                sendPrivateMessage(message);
+            }
 
-                System.out.println(username + " da dang nhap.");
+        } catch (IOException e) {
+            System.out.println("Mat ket noi voi "
+                    + (username == null ? "Client" : username));
 
-                String message;
-                while ((message = in.readLine()) != null) {
-                    if (message.equalsIgnoreCase("/quit")) {
-                        break;
-                    }
+        } finally {
+            if (username != null) {
+                boolean removed = clients.remove(username, this);
 
-                    if (message.equalsIgnoreCase("/users")) {
-                        out.println("INFO|Nguoi dung dang online: "
-                                + String.join(", ", clients.keySet()));
-                        continue;
-                    }
-
-                    sendPrivateMessage(message);
-                }
-
-            } catch (IOException e) {
-                System.out.println("Mat ket noi voi "
-                        + (username == null ? "Client" : username));
-            } finally {
-                if (username != null) {
-                    clients.remove(username, this);
+                if (removed) {
                     System.out.println(username + " da ngat ket noi.");
-                }
-
-                try {
-                    socket.close();
-                } catch (IOException e) {
-                    System.out.println("Loi dong ket noi: " + e.getMessage());
+                    broadcastUserList();
                 }
             }
+
+            try {
+                socket.close();
+            } catch (IOException e) {
+                System.out.println("Loi dong ket noi: " + e.getMessage());
+            }
         }
+    }
+    
+        private static void broadcastUserList() {
+        String users = String.join(", ", clients.keySet());
+        String message = "INFO|Nguoi dung dang online: " + users;
+
+        for (ClientHandler client : clients.values()) {
+            if (client.out != null) {
+                client.out.println(message);
+            }
+        }
+
+        System.out.println("So nguoi dang online: " + clients.size());
+    }
 
         private void sendPrivateMessage(String message) {
             // Cu phap: @tenNguoiNhan noi dung tin nhan
