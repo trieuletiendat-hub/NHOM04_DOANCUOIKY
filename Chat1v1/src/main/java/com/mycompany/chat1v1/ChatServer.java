@@ -90,6 +90,13 @@ public class ChatServer {
                 }
 
                 out.println("OK|Dang nhap thanh cong voi ten " + username);
+
+                Database.registerUser(username);
+                out.println("INFO|Nhap @tenNguoiNhan noiDungDeGui de nhan tin.");
+                out.println("INFO|Cu phap gui file: @file tenNguoiNhan tenFile kichThuocBytes");
+                out.println("INFO|Nhap /users de xem danh sach nguoi dung.");
+                out.println("INFO|Nhap /quit de thoat.");
+
                 System.out.println(username + " da dang nhap.");
                 broadcastUserList();
 
@@ -177,8 +184,14 @@ public class ChatServer {
                 return;
             }
 
+
             receiver.send("MSG|" + username + "|" + content);
             out.println("SENT|Đã gửi tin nhắn đến " + receiverName + ".");
+
+            receiver.out.println("MSG|" + username + "|" + content);
+            out.println("SENT|Da gui tin nhan den " + receiverName + ".");
+            Database.saveMessage(username, receiverName, content);
+
         }
 
         private void handleFileTransfer(InputStream rawIn, String headerMessage) throws IOException {
