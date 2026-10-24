@@ -1,9 +1,8 @@
 package com.mycompany.chat1v1;
 
-import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
@@ -25,8 +24,7 @@ public class ChatServer {
 
             while (true) {
                 Socket socket = serverSocket.accept();
-                System.out.println("Co Client ket noi: "
-                        + socket.getRemoteSocketAddress());
+                System.out.println("Co Client ket noi: " + socket.getRemoteSocketAddress());
 
                 Thread thread = new Thread(new ClientHandler(socket));
                 thread.start();
@@ -39,24 +37,40 @@ public class ChatServer {
     private static class ClientHandler implements Runnable {
 
         private final Socket socket;
-        private BufferedReader in;
         private PrintWriter out;
         private String username;
+        // Khóa ghi: không cho tin nhắn khác chen vào giữa lúc đang chuyển byte file
+        private final Object writeLock = new Object();
 
         public ClientHandler(Socket socket) {
             this.socket = socket;
         }
 
+        // Hàm đọc dòng thủ công từng byte từ InputStream, tuyệt đối không bị lỗi buffer nhị phân
+        private String readLineFromSocket(InputStream in) throws IOException {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            int b;
+            while ((b = in.read()) != -1) {
+                if (b == '\n') {
+                    break;
+                }
+                if (b != '\r') {
+                    baos.write(b);
+                }
+            }
+            if (baos.size() == 0 && b == -1) {
+                return null;
+            }
+            return baos.toString("UTF-8");
+        }
+
         @Override
         public void run() {
             try {
-                in = new BufferedReader(new InputStreamReader(
-                    socket.getInputStream(), StandardCharsets.UTF_8));
+                InputStream rawIn = socket.getInputStream();
+                out = new PrintWriter(socket.getOutputStream(), true, StandardCharsets.UTF_8);
 
-                out = new PrintWriter(socket.getOutputStream(), true,
-                    StandardCharsets.UTF_8);
-
-                String login = in.readLine();
+                String login = readLineFromSocket(rawIn);
 
                 if (login == null || !login.startsWith("LOGIN ")) {
                     out.println("ERROR|Vui long dang nhap bang ten nguoi dung.");
@@ -65,8 +79,7 @@ public class ChatServer {
 
                 username = login.substring(6).trim();
 
-                if (username.isEmpty() || username.contains("|")
-                    || username.contains(" ")) {
+                if (username.isEmpty() || username.contains("|") || username.contains(" ")) {
                     out.println("ERROR|Ten dang nhap khong hop le.");
                     return;
                 }
@@ -77,6 +90,7 @@ public class ChatServer {
                 }
 
                 out.println("OK|Dang nhap thanh cong voi ten " + username);
+
                 Database.registerUser(username);
                 out.println("INFO|Nhap @tenNguoiNhan noiDungDeGui de nhan tin.");
                 out.println("INFO|Cu phap gui file: @file tenNguoiNhan tenFile kichThuocBytes");
@@ -88,20 +102,18 @@ public class ChatServer {
 
                 String message;
 
-                while ((message = in.readLine()) != null) {
+                while ((message = readLineFromSocket(rawIn)) != null) {
                     if (message.equalsIgnoreCase("/quit")) {
                         break;
                     }
 
                     if (message.equalsIgnoreCase("/users")) {
-                        out.println("INFO|Nguoi dung dang online: "
-                                + String.join(", ", clients.keySet()));
+                        out.println("INFO|Nguoi dung dang online: " + String.join(", ", clients.keySet()));
                         continue;
                     }
 
-                    // Bắt lệnh gửi file
-                    if (message.startsWith("@file ")) {
-                        handleFileTransfer(message);
+                    if (message.startsWith("@file|")) {
+                        handleFileTransfer(rawIn, message);
                         continue;
                     }
 
@@ -109,13 +121,11 @@ public class ChatServer {
                 }
 
             } catch (IOException e) {
-                System.out.println("Mat ket noi voi "
-                        + (username == null ? "Client" : username));
+                System.out.println("Mat ket noi voi " + (username == null ? "Client" : username));
 
             } finally {
                 if (username != null) {
                     boolean removed = clients.remove(username, this);
-
                     if (removed) {
                         System.out.println(username + " da ngat ket noi.");
                         broadcastUserList();
@@ -130,17 +140,21 @@ public class ChatServer {
             }
         }
         
+        private void send(String line) {
+            synchronized (writeLock) {
+                out.println(line);
+            }
+        }
+
         private static void broadcastUserList() {
             String users = String.join(", ", clients.keySet());
             String message = "INFO|Nguoi dung dang online: " + users;
 
             for (ClientHandler client : clients.values()) {
                 if (client.out != null) {
-                    client.out.println(message);
+                    client.send(message);
                 }
             }
-
-            System.out.println("So nguoi dang online: " + clients.size());
         }
 
         private void sendPrivateMessage(String message) {
@@ -161,25 +175,27 @@ public class ChatServer {
             ClientHandler receiver = clients.get(receiverName);
 
             if (receiver == null) {
-                out.println("ERROR|Nguoi dung " + receiverName
-                        + " khong online hoac khong ton tai.");
+                out.println("ERROR|Nguoi dung " + receiverName + " khong online hoac khong ton tai.");
                 return;
             }
 
             if (receiver == this) {
-                out.println("ERROR|Ban khong the gui tin nhan cho chinh minh.");
+                out.println("ERROR|Ban khong te gui tin nhan cho chinh minh.");
                 return;
             }
+
+
+            receiver.send("MSG|" + username + "|" + content);
+            out.println("SENT|Đã gửi tin nhắn đến " + receiverName + ".");
 
             receiver.out.println("MSG|" + username + "|" + content);
             out.println("SENT|Da gui tin nhan den " + receiverName + ".");
             Database.saveMessage(username, receiverName, content);
+
         }
 
-        // Xử lý chuyển tiếp file từ người gửi sang người nhận
-        private void handleFileTransfer(String headerMessage) {
-            // Cú pháp: @file receiverName fileName fileSize
-            String[] parts = headerMessage.split(" ", 4);
+        private void handleFileTransfer(InputStream rawIn, String headerMessage) throws IOException {
+            String[] parts = headerMessage.split("\\|", 4);
             if (parts.length < 4) {
                 out.println("ERROR|Sai cu phap gui file.");
                 return;
@@ -199,51 +215,57 @@ public class ChatServer {
             ClientHandler receiver = clients.get(receiverName);
             if (receiver == null) {
                 out.println("ERROR|Nguoi dung " + receiverName + " khong online.");
-                discardIncomingFileStream(fileSize);
+                discardIncomingFileStream(rawIn, fileSize);
                 return;
             }
 
             if (receiver == this) {
                 out.println("ERROR|Ban khong the gui file cho chinh minh.");
-                discardIncomingFileStream(fileSize);
+                discardIncomingFileStream(rawIn, fileSize);
                 return;
             }
 
-            try {
-                // Báo cho client nhận chuẩn bị nhận luồng file
+            boolean relayOk = true;
+            byte[] buffer = new byte[8192];
+            long totalRead = 0;
+
+            synchronized (receiver.writeLock) {
+                // Header điều khiển (dạng chữ) rồi đến byte thô của file
                 receiver.out.println("FILE_START|" + username + "|" + fileName + "|" + fileSize);
-
-                // Chuyển tiếp luồng byte trực tiếp
-                InputStream rawIn = socket.getInputStream();
                 OutputStream rawOut = receiver.socket.getOutputStream();
-
-                byte[] buffer = new byte[4096];
-                long totalRead = 0;
-                int bytesRead;
 
                 while (totalRead < fileSize) {
                     int bytesToRead = (int) Math.min(buffer.length, fileSize - totalRead);
-                    bytesRead = rawIn.read(buffer, 0, bytesToRead);
-                    if (bytesRead == -1) break;
-
-                    rawOut.write(buffer, 0, bytesRead);
+                    int bytesRead = rawIn.read(buffer, 0, bytesToRead);
+                    if (bytesRead == -1) {
+                        throw new IOException("Nguoi gui ngat ket noi khi dang gui file");
+                    }
                     totalRead += bytesRead;
+
+                    if (relayOk) {
+                        try {
+                            rawOut.write(buffer, 0, bytesRead);
+                        } catch (IOException e) {
+                            relayOk = false; // người nhận lỗi: vẫn đọc hết byte của người gửi
+                        }
+                    }
                 }
-                rawOut.flush();
+                if (relayOk) {
+                    rawOut.flush();
+                }
+            }
 
-                out.println("SENT|Da gui file " + fileName + " den " + receiverName + ".");
-                System.out.println(username + " da gui file " + fileName + " cho " + receiverName);
-
-            } catch (IOException e) {
-                System.out.println("Loi truyen file: " + e.getMessage());
+            if (relayOk) {
+                out.println("SENT|Đã gửi tệp tin thành công: " + fileName);
+                System.out.println(username + " da truyen file " + fileName + " cho " + receiverName);
+            } else {
+                out.println("ERROR|Khong gui duoc file den " + receiverName + ".");
             }
         }
 
-        // Đọc bỏ luồng dữ liệu file nếu xảy ra lỗi người nhận không hợp lệ
-        private void discardIncomingFileStream(long fileSize) {
+        private void discardIncomingFileStream(InputStream rawIn, long fileSize) {
             try {
-                InputStream rawIn = socket.getInputStream();
-                byte[] buffer = new byte[4096];
+                byte[] buffer = new byte[8192];
                 long totalRead = 0;
                 while (totalRead < fileSize) {
                     int bytesToRead = (int) Math.min(buffer.length, fileSize - totalRead);
