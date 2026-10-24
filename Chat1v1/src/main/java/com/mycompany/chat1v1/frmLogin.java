@@ -15,6 +15,7 @@ public class frmLogin extends javax.swing.JFrame {
      */
     public frmLogin() {
         initComponents();
+        setupModernUI();
         
         setLocationRelativeTo(null);
         setTitle("Chat TCP - Dang nhap");
@@ -24,7 +25,64 @@ public class frmLogin extends javax.swing.JFrame {
         btnLogin.addActionListener(e -> login());
         txtUsername.addActionListener(e -> login());
     }
-    
+   
+    private void setupModernUI() {
+        java.awt.Color primary = new java.awt.Color(81, 70, 216);
+        java.awt.Color background = new java.awt.Color(244, 243, 252);
+        java.awt.Color text = new java.awt.Color(37, 39, 68);
+        java.awt.Color muted = new java.awt.Color(111, 116, 140);
+        java.awt.Color border = new java.awt.Color(221, 222, 237);
+
+        getContentPane().setBackground(background);
+        setTitle("Chat Connect | Dang nhap");
+
+        lblTitle.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.BOLD, 23));
+        lblTitle.setForeground(primary);
+        lblSubtitle.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.PLAIN, 12));
+        lblSubtitle.setForeground(muted);
+        lblHost.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.BOLD, 12));
+        lblHost.setForeground(text);
+        lblUsername.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.BOLD, 12));
+        lblUsername.setForeground(text);
+
+        java.awt.Font inputFont = new java.awt.Font(
+            "Segoe UI", java.awt.Font.PLAIN, 13);
+
+        javax.swing.border.Border inputBorder =
+            javax.swing.BorderFactory.createCompoundBorder(
+                    javax.swing.BorderFactory.createLineBorder(border),
+                    javax.swing.BorderFactory.createEmptyBorder(5, 8, 5, 8));
+
+        txtHost.setFont(inputFont);
+        txtUsername.setFont(inputFont);
+
+        txtHost.setBorder(inputBorder);
+        txtUsername.setBorder(inputBorder);
+
+        txtHost.setBackground(java.awt.Color.WHITE);
+        txtUsername.setBackground(java.awt.Color.WHITE);
+        txtHost.setForeground(text);
+        txtUsername.setForeground(text);
+
+        btnLogin.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.BOLD, 13));
+        btnLogin.setForeground(java.awt.Color.WHITE);
+        btnLogin.setBackground(primary);
+        btnLogin.setOpaque(true);
+        btnLogin.setBorderPainted(false);
+        btnLogin.setFocusPainted(false);
+        btnLogin.setCursor(new java.awt.Cursor(
+            java.awt.Cursor.HAND_CURSOR));
+
+        lblStatus.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.PLAIN, 11));
+        lblStatus.setForeground(muted);
+    }
+
     private void login() {
         String host = txtHost.getText().trim();
         String username = txtUsername.getText().trim();
@@ -203,7 +261,7 @@ public class frmLogin extends javax.swing.JFrame {
                 .addComponent(btnLogin)
                 .addGap(18, 18, 18)
                 .addComponent(lblStatus, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                .addContainerGap(18, Short.MAX_VALUE))
         );
 
         pack();

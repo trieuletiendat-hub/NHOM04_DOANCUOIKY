@@ -184,10 +184,6 @@ public class ChatServer {
                 return;
             }
 
-
-            receiver.send("MSG|" + username + "|" + content);
-            out.println("SENT|Đã gửi tin nhắn đến " + receiverName + ".");
-
             receiver.out.println("MSG|" + username + "|" + content);
             out.println("SENT|Da gui tin nhan den " + receiverName + ".");
             Database.saveMessage(username, receiverName, content);
