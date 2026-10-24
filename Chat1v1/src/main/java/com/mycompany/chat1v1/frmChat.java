@@ -4,6 +4,7 @@
  */
 package com.mycompany.chat1v1;
 
+    
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -27,6 +28,8 @@ public class frmChat extends javax.swing.JFrame {
 
     private final javax.swing.DefaultListModel<String> userModel = new javax.swing.DefaultListModel<>();
     private boolean closing = false;
+    // Khóa để tin nhắn và file không bị ghi xen kẽ vào cùng một socket
+    private final Object sendLock = new Object();
     /**
      * Creates new form frmChat
      */
@@ -82,13 +85,37 @@ public class frmChat extends javax.swing.JFrame {
             }
         });
     }
-    
+    private String readLineFromSocket(InputStream in) throws IOException {
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        int b;
+        while ((b = in.read()) != -1) {
+            if (b == '\n') {
+                break;
+            }
+            if (b != '\r') {
+                baos.write(b);
+            }
+        }
+        if (baos.size() == 0 && b == -1) {
+            return null;
+        }
+        return baos.toString("UTF-8");
+    }
+
     public void startReceiver() {
         Thread receiverThread = new Thread(() -> {
             try {
+                InputStream rawIn = socket.getInputStream();
                 String line;
 
-                while ((line = in.readLine()) != null) {
+                while ((line = readLineFromSocket(rawIn)) != null) {
+                    // Gặp header file: đọc đúng số byte của file NGAY TẠI LUỒNG NÀY
+                    // rồi mới đọc tiếp tin nhắn, để byte file không bị coi là chữ.
+                    if (line.startsWith("FILE_START|")) {
+                        handleIncomingFile(rawIn, line);
+                        continue;
+                    }
+
                     final String message = line;
 
                     javax.swing.SwingUtilities.invokeLater(
@@ -99,9 +126,7 @@ public class frmChat extends javax.swing.JFrame {
                 if (!closing) {
                     javax.swing.SwingUtilities.invokeLater(() -> {
                         lblStatus.setText("Mất kết nối");
-                        appendMessage(
-                            "[Hệ thống] Kết nối đến server đã bị ngắt."
-                        );
+                        appendMessage("[Hệ thống] Kết nối đến server đã bị ngắt.");
                     });
                 }
             }
@@ -110,86 +135,100 @@ public class frmChat extends javax.swing.JFrame {
         receiverThread.setDaemon(true);
         receiverThread.start();
     }
-private void receiveFile(String sender, String fileName, long fileSize) {
+
+    // Nhận file: đọc đủ fileSize byte từ socket, lưu vào Downloads, chỉ báo kết quả lên chat
+    private void handleIncomingFile(InputStream rawIn, String header) throws IOException {
+        String[] parts = header.split("\\|", 4);
+        if (parts.length < 4) {
+            return;
+        }
+
+        final String sender = parts[1];
+        final String fileName = new File(parts[2]).getName(); // chặn đường dẫn lạ
+        long fileSize;
+        try {
+            fileSize = Long.parseLong(parts[3]);
+        } catch (NumberFormatException e) {
+            return;
+        }
+
+        File downloadDir = new File(System.getProperty("user.home"), "Downloads");
+        if (!downloadDir.exists()) {
+            downloadDir.mkdirs();
+        }
+        File savedFile = uniqueFile(downloadDir, fileName);
+
+        boolean ok = true;
+        FileOutputStream fos = null;
+        try {
+            fos = new FileOutputStream(savedFile);
+        } catch (IOException e) {
+            ok = false; // vẫn phải đọc hết byte để socket không bị lệch
+        }
+
+        try {
+            byte[] buffer = new byte[8192];
+            long totalRead = 0;
+            while (totalRead < fileSize) {
+                int bytesToRead = (int) Math.min(buffer.length, fileSize - totalRead);
+                int n = rawIn.read(buffer, 0, bytesToRead);
+                if (n == -1) {
+                    throw new IOException("Mất kết nối khi đang nhận file");
+                }
+                totalRead += n;
+
+                if (ok) {
+                    try {
+                        fos.write(buffer, 0, n);
+                    } catch (IOException e) {
+                        ok = false;
+                    }
+                }
+            }
+        } finally {
+            if (fos != null) {
+                try {
+                    fos.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }
+
+        final boolean success = ok;
         javax.swing.SwingUtilities.invokeLater(() -> {
-            JFileChooser saveChooser = new JFileChooser();
-            saveChooser.setSelectedFile(new File(fileName));
-            int option = saveChooser.showSaveDialog(this);
-            
-            if (option == JFileChooser.APPROVE_OPTION) {
-                File savedFile = saveChooser.getSelectedFile();
-                
-                new Thread(() -> {
-                    try {
-                        InputStream rawIn = socket.getInputStream();
-                        FileOutputStream fos = new FileOutputStream(savedFile);
-                        byte[] buffer = new byte[4096];
-                        long totalRead = 0;
-                        int bytesRead;
-                        
-                        while (totalRead < fileSize) {
-                            int bytesToRead = (int) Math.min(buffer.length, fileSize - totalRead);
-                            bytesRead = rawIn.read(buffer, 0, bytesToRead);
-                            if (bytesRead == -1) break;
-                            
-                            fos.write(buffer, 0, bytesRead);
-                            totalRead += bytesRead;
-                        }
-                        fos.close();
-                        
-                        javax.swing.SwingUtilities.invokeLater(() -> {
-                            appendMessage("[Hệ thống] Đã nhận file từ [" + sender + "]. Lưu tại: " + savedFile.getAbsolutePath());
-                            javax.swing.JOptionPane.showMessageDialog(this, "Tải file thành công:\n" + savedFile.getAbsolutePath());
-                        });
-                        
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        javax.swing.SwingUtilities.invokeLater(() -> {
-                            javax.swing.JOptionPane.showMessageDialog(this, "Lỗi khi lưu file: " + e.getMessage());
-                        });
-                    }
-                }).start();
-                
+            if (success) {
+                appendMessage("[Hệ thống] Đã nhận tệp tin thành công từ [" + sender + "]: "
+                        + fileName + " (đã lưu vào thư mục Downloads)");
             } else {
-                // Nếu hủy, đọc bỏ số byte dữ liệu đang chờ trên socket để không làm lệch buffer
-                new Thread(() -> {
-                    try {
-                        InputStream rawIn = socket.getInputStream();
-                        byte[] buffer = new byte[4096];
-                        long totalRead = 0;
-                        while (totalRead < fileSize) {
-                            int bytesToRead = (int) Math.min(buffer.length, fileSize - totalRead);
-                            int read = rawIn.read(buffer, 0, bytesToRead);
-                            if (read == -1) break;
-                            totalRead += read;
-                        }
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }).start();
-                
-                appendMessage("[Hệ thống] Bạn đã hủy nhận file từ " + sender);
+                appendMessage("[Lỗi hệ thống] Không thể lưu tệp tin nhận được từ " + sender);
             }
         });
     }
-    private void processMessage(String incoming) {
-        String[] parts = incoming.split("\\|", 4); // Cho phép tách tối đa 4 phần
+
+    // Nếu trùng tên thì thêm (1), (2)... để không ghi đè file cũ
+    private File uniqueFile(File dir, String name) {
+        File f = new File(dir, name);
+        if (!f.exists()) {
+            return f;
+        }
+        int dot = name.lastIndexOf('.');
+        String base = dot > 0 ? name.substring(0, dot) : name;
+        String ext = dot > 0 ? name.substring(dot) : "";
+        int i = 1;
+        while (f.exists()) {
+            f = new File(dir, base + " (" + i + ")" + ext);
+            i++;
+        }
+        return f;
+    }
+
+      private void processMessage(String incoming) {
+        String[] parts = incoming.split("\\|", 4);
 
         switch (parts[0]) {
             case "MSG":
                 if (parts.length >= 3) {
                     appendMessage("[" + parts[1] + "] " + parts[2]);
-                }
-                break;
-
-            // Xử lý khi có người gửi file đến
-            case "FILE_START":
-                if (parts.length >= 4) {
-                    String sender = parts[1];
-                    String fileName = parts[2];
-                    long fileSize = Long.parseLong(parts[3]);
-                    
-                    receiveFile(sender, fileName, fileSize);
                 }
                 break;
 
@@ -213,14 +252,14 @@ private void receiveFile(String sender, String fileName, long fileSize) {
                 break;
 
             case "ERROR":
-                appendMessage("[Lỗi] "
-                    + (parts.length >= 2 ? parts[1] : incoming));
+                appendMessage("[Lỗi] " + (parts.length >= 2 ? parts[1] : incoming));
                 break;
 
             default:
                 appendMessage(incoming);
         }
     }
+    
 
     private void sendMessage() {
         String content = txtMessage.getText().trim();
@@ -243,9 +282,13 @@ private void receiveFile(String sender, String fileName, long fileSize) {
         return;
         }
 
-        out.println("@" + receiver + " " + content);
+        boolean failed;
+        synchronized (sendLock) {
+            out.println("@" + receiver + " " + content);
+            failed = out.checkError();
+        }
 
-        if (out.checkError()) {
+        if (failed) {
             appendMessage("[Lỗi] Không gửi được tin nhắn.");
             return;
         }
@@ -478,7 +521,7 @@ private void receiveFile(String sender, String fileName, long fileSize) {
     }// </editor-fold>//GEN-END:initComponents
 
     private void btnSendFileActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnSendFileActionPerformed
-      String receiver = lstUsers.getSelectedValue();
+         String receiver = lstUsers.getSelectedValue();
         if (receiver == null) {
             javax.swing.JOptionPane.showMessageDialog(this, "Vui lòng chọn người nhận trước khi gửi file.");
             return;
@@ -494,34 +537,35 @@ private void receiveFile(String sender, String fileName, long fileSize) {
         
         if (result == JFileChooser.APPROVE_OPTION) {
             File fileToSend = fileChooser.getSelectedFile();
-            
+
+            if (socket == null || socket.isClosed()) {
+                javax.swing.JOptionPane.showMessageDialog(this, "Chưa kết nối tới server!");
+                return;
+            }
+
             new Thread(() -> {
                 try {
-                    if (socket == null || socket.isClosed()) {
-                        javax.swing.JOptionPane.showMessageDialog(frmChat.this, "Chưa kết nối tới server!");
-                        return;
-                    }
-                    
-                    // Gửi header thông báo qua PrintWriter (out)
-                    out.println("@file " + receiver + " " + fileToSend.getName() + " " + fileToSend.length());
-                    
-                    // Đẩy luồng byte dữ liệu qua OutputStream của socket
+                    synchronized (sendLock) {
+                        String safeName = fileToSend.getName().replace("|", "_");
+
+                        // Header điều khiển
+                        out.println("@file|" + receiver + "|" + safeName + "|" + fileToSend.length());
+                        out.flush();
+
+                        // Byte thô của file
                         OutputStream rawOut = socket.getOutputStream();
-                    FileInputStream fis = new FileInputStream(fileToSend);
-                    byte[] buffer = new byte[4096];
-                    int bytesRead;
-                    
-                    while ((bytesRead = fis.read(buffer)) != -1) {
-                        rawOut.write(buffer, 0, bytesRead);
+                        try (FileInputStream fis = new FileInputStream(fileToSend)) {
+                            byte[] buffer = new byte[8192];
+                            int bytesRead;
+                            while ((bytesRead = fis.read(buffer)) != -1) {
+                                rawOut.write(buffer, 0, bytesRead);
+                            }
+                        }
+                        rawOut.flush();
                     }
-                    rawOut.flush();
-                    fis.close();
-                    
-                    javax.swing.SwingUtilities.invokeLater(() -> {
-                        appendMessage("[Bạn → " + receiver + "] Đã gửi file thành công: " + fileToSend.getName());
-                    });
-                    
-                } catch (IOException e) {
+                    // Thông báo "gửi thành công" do server trả về (SENT|...) và hiện ở processMessage
+
+                } catch (Exception e) {
                     e.printStackTrace();
                     javax.swing.SwingUtilities.invokeLater(() -> {
                         javax.swing.JOptionPane.showMessageDialog(frmChat.this, "Lỗi khi gửi file: " + e.getMessage());
@@ -540,6 +584,25 @@ private void receiveFile(String sender, String fileName, long fileSize) {
         /* If Nimbus (introduced in Java SE 6) is not available, stay with the default look and feel.
          * For details see http://download.oracle.com/javase/tutorial/uiswing/lookandfeel/plaf.html 
          */
+        try {
+            for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
+                if ("Nimbus".equals(info.getName())) {
+                    javax.swing.UIManager.setLookAndFeel(info.getClassName());
+                    break;
+                }
+            }
+        } catch (ClassNotFoundException ex) {
+            java.util.logging.Logger.getLogger(frmChat.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+        } catch (InstantiationException ex) {
+            java.util.logging.Logger.getLogger(frmChat.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+        } catch (IllegalAccessException ex) {
+            java.util.logging.Logger.getLogger(frmChat.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+        } catch (javax.swing.UnsupportedLookAndFeelException ex) {
+            java.util.logging.Logger.getLogger(frmChat.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+        }
+        //</editor-fold>
+
+        /* Create and display the form */
         try {
             for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
                 if ("Nimbus".equals(info.getName())) {
