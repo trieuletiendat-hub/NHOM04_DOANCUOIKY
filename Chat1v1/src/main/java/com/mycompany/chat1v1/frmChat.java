@@ -35,6 +35,8 @@ public class frmChat extends javax.swing.JFrame {
      */
     public frmChat() {
         initComponents();
+        setupModernUI();
+        setLocationRelativeTo(null);
     }
     
     public frmChat(
@@ -56,7 +58,8 @@ public class frmChat extends javax.swing.JFrame {
         }
 
         initComponents();
-
+        setupModernUI();
+        
         setTitle("Chat TCP 1-1 - " + username);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(
@@ -85,6 +88,149 @@ public class frmChat extends javax.swing.JFrame {
             }
         });
     }
+     
+    private void setupModernUI() {
+        java.awt.Color primary = new java.awt.Color(81, 70, 216);
+        java.awt.Color primaryHover = new java.awt.Color(103, 92, 235);
+        java.awt.Color background = new java.awt.Color(244, 243, 252);
+        java.awt.Color text = new java.awt.Color(37, 39, 68);
+        java.awt.Color muted = new java.awt.Color(111, 116, 140);
+        java.awt.Color border = new java.awt.Color(224, 223, 240);
+        java.awt.Color white = java.awt.Color.WHITE;
+
+    // ===== NỀN CHÍNH =====
+        getContentPane().setBackground(background);
+
+        setTitle("Chat Connect | Trò chuyện 1-1");
+        setMinimumSize(new java.awt.Dimension(700, 450));
+
+    // ===== TIÊU ĐỀ =====
+        lblTitle.setText("CHAT CONNECT");
+        lblTitle.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.BOLD, 23));
+        lblTitle.setForeground(primary);
+
+        lblCurrentUser.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.BOLD, 12));
+        lblCurrentUser.setForeground(text);
+
+        lblStatus.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.PLAIN, 12));
+        lblStatus.setForeground(new java.awt.Color(35, 150, 105));
+
+        lblUsersTitle.setText("Người dùng trực tuyến");
+        lblUsersTitle.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.BOLD, 13));
+        lblUsersTitle.setForeground(text);
+
+        lblConversation.setText("Nội dung hội thoại");
+        lblConversation.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.BOLD, 13));
+        lblConversation.setForeground(text);
+
+    // ===== DANH SÁCH NGƯỜI DÙNG =====
+        lstUsers.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.PLAIN, 13));
+        lstUsers.setForeground(text);
+        lstUsers.setBackground(white);
+        lstUsers.setSelectionBackground(new java.awt.Color(229, 226, 255));
+        lstUsers.setSelectionForeground(primary);
+        lstUsers.setFixedCellHeight(34);
+        lstUsers.setBorder(
+            javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5));
+
+        jScrollPane1.setBorder(
+            javax.swing.BorderFactory.createLineBorder(border));
+        jScrollPane1.getViewport().setBackground(white);
+
+    // ===== KHUNG CHAT =====
+        txtChat.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.PLAIN, 13));
+        txtChat.setForeground(text);
+        txtChat.setBackground(white);
+        txtChat.setEditable(false);
+        txtChat.setLineWrap(true);
+        txtChat.setWrapStyleWord(true);
+        txtChat.setMargin(new java.awt.Insets(12, 12, 12, 12));
+
+        jScrollPane2.setBorder(
+            javax.swing.BorderFactory.createLineBorder(border));
+        jScrollPane2.getViewport().setBackground(white);
+
+    // ===== Ô NHẬP TIN NHẮN =====
+        txtMessage.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.PLAIN, 13));
+        txtMessage.setForeground(text);
+        txtMessage.setBackground(white);
+        txtMessage.setCaretColor(primary);
+        txtMessage.setBorder(
+            javax.swing.BorderFactory.createCompoundBorder(
+                javax.swing.BorderFactory.createLineBorder(border, 1, true),
+                    javax.swing.BorderFactory.createEmptyBorder(8, 10, 8, 10)
+            )
+        );
+
+    // ===== ĐƯỜNG PHÂN CÁCH =====
+        jSeparator1.setForeground(border);
+        jSeparator1.setBackground(border);
+
+    // ===== CÁC NÚT =====
+        styleButton(btnSend, "Gửi",
+            primary, primaryHover, white);
+
+        styleButton(btnSendFile, "Gửi file",
+            new java.awt.Color(56, 120, 210),
+            new java.awt.Color(75, 140, 230), white);
+
+        styleButton(btnRefresh, "Làm mới",
+            new java.awt.Color(231, 228, 255),
+            new java.awt.Color(215, 210, 255), primary);
+
+        styleButton(btnLogout, "Đăng xuất",
+            new java.awt.Color(220, 75, 95),
+            new java.awt.Color(195, 55, 78), white);
+    }
+
+    // Định dạng nút và tạo hiệu ứng khi rê chuột
+    private void styleButton(
+        javax.swing.JButton button,
+        String title,
+        java.awt.Color normal,
+        java.awt.Color hover,
+        java.awt.Color foreground) {
+
+        button.setText(title);
+        button.setFont(new java.awt.Font(
+            "Segoe UI", java.awt.Font.BOLD, 12));
+        button.setForeground(foreground);
+        button.setBackground(normal);
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.setBorderPainted(false);
+        button.setFocusPainted(false);
+        button.setCursor(new java.awt.Cursor(
+            java.awt.Cursor.HAND_CURSOR));
+
+        button.setBorder(
+            javax.swing.BorderFactory.createCompoundBorder(
+                javax.swing.BorderFactory.createLineBorder(normal, 1, true),
+                    javax.swing.BorderFactory.createEmptyBorder(7, 12, 7, 12)
+                )
+        );
+
+        button.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                button.setBackground(hover);
+            }
+
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                button.setBackground(normal);
+            }
+        });
+    }
+
     private String readLineFromSocket(InputStream in) throws IOException {
         java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
         int b;
