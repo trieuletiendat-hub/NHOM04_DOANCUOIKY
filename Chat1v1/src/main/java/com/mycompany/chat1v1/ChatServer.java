@@ -77,6 +77,7 @@ public class ChatServer {
                 }
 
                 out.println("OK|Dang nhap thanh cong voi ten " + username);
+                Database.registerUser(username);
                 out.println("INFO|Nhap @tenNguoiNhan noiDungDeGui de nhan tin.");
                 out.println("INFO|Cu phap gui file: @file tenNguoiNhan tenFile kichThuocBytes");
                 out.println("INFO|Nhap /users de xem danh sach nguoi dung.");
@@ -172,6 +173,7 @@ public class ChatServer {
 
             receiver.out.println("MSG|" + username + "|" + content);
             out.println("SENT|Da gui tin nhan den " + receiverName + ".");
+            Database.saveMessage(username, receiverName, content);
         }
 
         // Xử lý chuyển tiếp file từ người gửi sang người nhận
