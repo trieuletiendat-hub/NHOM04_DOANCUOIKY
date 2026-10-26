@@ -8,6 +8,7 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -39,14 +40,12 @@ public class ChatServer {
         private final Socket socket;
         private PrintWriter out;
         private String username;
-        // Khóa ghi: không cho tin nhắn khác chen vào giữa lúc đang chuyển byte file
         private final Object writeLock = new Object();
 
         public ClientHandler(Socket socket) {
             this.socket = socket;
         }
 
-        // Hàm đọc dòng thủ công từng byte từ InputStream, tuyệt đối không bị lỗi buffer nhị phân
         private String readLineFromSocket(InputStream in) throws IOException {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             int b;
@@ -184,9 +183,11 @@ public class ChatServer {
                 return;
             }
 
-            receiver.out.println("MSG|" + username + "|" + content);
+            String encryptedContent = Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8));
+
+            receiver.out.println("MSG|" + username + "|" + encryptedContent);
             out.println("SENT|Da gui tin nhan den " + receiverName + ".");
-            Database.saveMessage(username, receiverName, content);
+            Database.saveMessage(username, receiverName, encryptedContent);
 
         }
 
@@ -226,7 +227,6 @@ public class ChatServer {
             long totalRead = 0;
 
             synchronized (receiver.writeLock) {
-                // Header điều khiển (dạng chữ) rồi đến byte thô của file
                 receiver.out.println("FILE_START|" + username + "|" + fileName + "|" + fileSize);
                 OutputStream rawOut = receiver.socket.getOutputStream();
 
@@ -242,7 +242,7 @@ public class ChatServer {
                         try {
                             rawOut.write(buffer, 0, bytesRead);
                         } catch (IOException e) {
-                            relayOk = false; // người nhận lỗi: vẫn đọc hết byte của người gửi
+                            relayOk = false;
                         }
                     }
                 }
