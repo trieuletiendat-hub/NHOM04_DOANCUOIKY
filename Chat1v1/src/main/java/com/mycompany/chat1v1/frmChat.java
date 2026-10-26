@@ -14,18 +14,23 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
+import java.util.Base64;
+import java.nio.charset.StandardCharsets;
 
 /**
  *
  * @author Nguyen Bich Anh
  */
+// Khai báo ở đầu class frmChat
+
 public class frmChat extends javax.swing.JFrame {
     private java.net.Socket socket;
     private java.io.BufferedReader in;
     private java.io.PrintWriter out;
     private String username;
     private DataOutputStream dos;
-
+    
+    private final java.util.Map<String, PrivateChat> privateChatWindows = new java.util.HashMap<>();
     private final javax.swing.DefaultListModel<String> userModel = new javax.swing.DefaultListModel<>();
     private boolean closing = false;
     // Khóa để tin nhắn và file không bị ghi xen kẽ vào cùng một socket
@@ -33,14 +38,8 @@ public class frmChat extends javax.swing.JFrame {
     /**
      * Creates new form frmChat
      */
-    public frmChat() {
-        initComponents();
-        setupModernUI();
-        setLocationRelativeTo(null);
-    }
-    
     public frmChat(
-      String username,
+        String username,
         java.net.Socket socket,
         java.io.BufferedReader in,
         java.io.PrintWriter out,
@@ -52,7 +51,7 @@ public class frmChat extends javax.swing.JFrame {
         this.out = out;
         
         try {
-            this.dos = new DataOutputStream(socket.getOutputStream()); // Khởi tạo luồng ghi nhị phân
+            this.dos = new DataOutputStream(socket.getOutputStream());
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -62,8 +61,7 @@ public class frmChat extends javax.swing.JFrame {
         
         setTitle("Chat TCP 1-1 - " + username);
         setLocationRelativeTo(null);
-        setDefaultCloseOperation(
-            javax.swing.WindowConstants.DO_NOTHING_ON_CLOSE);
+        setDefaultCloseOperation(javax.swing.WindowConstants.DO_NOTHING_ON_CLOSE);
 
         lblCurrentUser.setText("Đăng nhập: " + username);
         lblStatus.setText("Đã kết nối");
@@ -74,12 +72,25 @@ public class frmChat extends javax.swing.JFrame {
         lstUsers.setModel(userModel);
 
         appendMessage("[Hệ thống] " + loginMessage);
-        appendMessage("[Hệ thống] Chọn người nhận rồi nhập tin nhắn.");
+        appendMessage("[Hệ thống] Double-click vào tên người dùng để mở khung chat riêng.");
 
         btnSend.addActionListener(e -> sendMessage());
         txtMessage.addActionListener(e -> sendMessage());
         btnRefresh.addActionListener(e -> refreshUsers());
         btnLogout.addActionListener(e -> disconnect());
+
+        // Bắt sự kiện double-click vào JList để mở cửa sổ chat riêng
+        lstUsers.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    String selectedUser = lstUsers.getSelectedValue();
+                    if (selectedUser != null && !selectedUser.equals(username)) {
+                        openPrivateChat(selectedUser);
+                    }
+                }
+            }
+        });
 
         addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
@@ -87,8 +98,27 @@ public class frmChat extends javax.swing.JFrame {
                 disconnect();
             }
         });
+
+        // Khởi động luồng lắng nghe dữ liệu từ Server
+        startListening();
     }
-     
+    private void startListening() {
+        Thread listenerThread = new Thread(() -> {
+            try {
+                String incoming;
+                while ((incoming = in.readLine()) != null) {
+                    processMessage(incoming);
+                }
+            } catch (IOException e) {
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    appendMessage("[Lỗi] Mất kết nối tới Server.");
+                });
+            }
+        });
+        listenerThread.setDaemon(true);
+        listenerThread.start();
+    }
+    
     private void setupModernUI() {
         java.awt.Color primary = new java.awt.Color(81, 70, 216);
         java.awt.Color primaryHover = new java.awt.Color(103, 92, 235);
@@ -369,68 +399,185 @@ public class frmChat extends javax.swing.JFrame {
     }
 
       private void processMessage(String incoming) {
-        String[] parts = incoming.split("\\|", 4);
+        if (incoming == null || incoming.trim().isEmpty()) {
+            return;
+        }
 
-        switch (parts[0]) {
-            case "MSG":
-                if (parts.length >= 3) {
-                    appendMessage("[" + parts[1] + "] " + parts[2]);
-                }
-                break;
+        String upperIncoming = incoming.toUpperCase();
 
-            case "INFO":
-                if (parts.length >= 2) {
-                    String info = parts[1];
-                    String prefix = "Nguoi dung dang online: ";
+        // 1. Tự động bắt mọi thông báo danh sách online từ server
+        if (upperIncoming.contains("DANG ONLINE") || upperIncoming.contains("ONLINE:")) {
+            int colonIdx = incoming.indexOf(":");
+            if (colonIdx != -1 && colonIdx < incoming.length() - 1) {
+                updateUsers(incoming.substring(colonIdx + 1).trim());
+                return;
+            }
+        }
 
-                    if (info.startsWith(prefix)) {
-                        updateUsers(info.substring(prefix.length()));
-                    } else {
-                        appendMessage("[Hệ thống] " + info);
+        // 2. Xử lý tin nhắn riêng (Quét tìm từ khóa PRIVATE_MSG, E_MSG, _MSG hoặc các biến thể bị cụt đầu do dính gói tin)
+        if (upperIncoming.contains("PRIVATE_MSG") || upperIncoming.contains("RIVATE_MSG") || 
+            upperIncoming.contains("VATE_MSG") || upperIncoming.contains("E_MSG") || upperIncoming.contains("_MSG")) {
+            
+            int idx = -1;
+            if (upperIncoming.contains("PRIVATE_MSG")) idx = upperIncoming.indexOf("PRIVATE_MSG");
+            else if (upperIncoming.contains("RIVATE_MSG")) idx = upperIncoming.indexOf("RIVATE_MSG");
+            else if (upperIncoming.contains("VATE_MSG")) idx = upperIncoming.indexOf("VATE_MSG");
+            else if (upperIncoming.contains("E_MSG")) idx = upperIncoming.indexOf("E_MSG");
+            else if (upperIncoming.contains("_MSG")) idx = upperIncoming.indexOf("_MSG");
+
+            if (idx != -1) {
+                String sub = incoming.substring(idx);
+                // Cắt bỏ phần prefix bị lệch nếu có
+                int pipeIdx = sub.indexOf("|");
+                if (pipeIdx != -1) {
+                    // Tìm ngược lại từ dấu | đầu tiên để lấy đúng cấu trúc [PREFIX]|[SENDER]|[CONTENT]
+                    // Hoặc đơn giản là tách theo dấu |
+                    String[] parts = sub.split("\\|", 3);
+                    if (parts.length >= 3) {
+                        String sender = parts[1].trim();
+                        String encryptedContent = parts[2].trim();
+                        
+                        // Lọc bỏ khoảng trắng hoặc rác thừa phía sau nếu có
+                        int spaceIdx = encryptedContent.indexOf(' ');
+                        if (spaceIdx != -1) {
+                            encryptedContent = encryptedContent.substring(0, spaceIdx);
+                        }
+
+                        String content = decodeBase64Safe(encryptedContent);
+
+                        final String finalSender = sender;
+                        final String finalContent = content;
+
+                        javax.swing.SwingUtilities.invokeLater(() -> {
+                            PrivateChat openWindow = privateChatWindows.get(finalSender);
+                            if (openWindow != null && openWindow.isDisplayable()) {
+                                openWindow.appendMessage("[" + finalSender + "]: " + finalContent);
+                                openWindow.setVisible(true);
+                                openWindow.toFront();
+                            } else {
+                                openPrivateChat(finalSender);
+                                PrivateChat newWindow = privateChatWindows.get(finalSender);
+                                if (newWindow != null) {
+                                    newWindow.appendMessage("[" + finalSender + "]: " + finalContent);
+                                }
+                            }
+                        });
+                        return;
                     }
                 }
-                break;
+            }
+        }
 
-            case "SENT":
-                if (parts.length >= 2) {
-                    appendMessage("[Hệ thống] " + parts[1]);
+        // 3. Xử lý tin nhắn nhóm (Quét tìm MSG|)
+        if (upperIncoming.contains("MSG|") || upperIncoming.contains("SG|")) {
+            int idx = upperIncoming.indexOf("MSG|");
+            if (idx == -1) idx = upperIncoming.indexOf("SG|");
+            
+            if (idx != -1) {
+                String sub = incoming.substring(idx);
+                String[] parts = sub.split("\\|", 3);
+                if (parts.length >= 3) {
+                    String sender = parts[1].trim();
+                    String encryptedContent = parts[2].trim();
+                    
+                    int spaceIdx = encryptedContent.indexOf(' ');
+                    if (spaceIdx != -1) {
+                        encryptedContent = encryptedContent.substring(0, spaceIdx);
+                    }
+
+                    String content = decodeBase64Safe(encryptedContent);
+                    appendMessage("[" + sender + " (Group)]: " + content);
+                    return;
+                } else if (parts.length == 2) {
+                    String encryptedContent = parts[1].trim();
+                    String content = decodeBase64Safe(encryptedContent);
+                    appendMessage("[Group]: " + content);
+                    return;
                 }
-                break;
+            }
+        }
 
-            case "ERROR":
-                appendMessage("[Lỗi] " + (parts.length >= 2 ? parts[1] : incoming));
-                break;
+        // 4. Xử lý thông điệp hệ thống (INFO, SENT, ERROR)
+        if (upperIncoming.contains("INFO|") || upperIncoming.contains("SENT|") || upperIncoming.contains("ERROR|")) {
+            int idx = -1;
+            String type = "";
+            if (upperIncoming.contains("INFO|")) { idx = upperIncoming.indexOf("INFO|"); type = "INFO"; }
+            else if (upperIncoming.contains("SENT|")) { idx = upperIncoming.indexOf("SENT|"); type = "SENT"; }
+            else if (upperIncoming.contains("ERROR|")) { idx = upperIncoming.indexOf("ERROR|"); type = "ERROR"; }
 
-            default:
-                appendMessage(incoming);
+            if (idx != -1) {
+                String sub = incoming.substring(idx);
+                String[] parts = sub.split("\\|", 2);
+                if (parts.length >= 2) {
+                    String msg = parts[1].trim();
+                    if (type.equals("INFO") || type.equals("SENT")) {
+                        appendMessage("[Hệ thống] " + msg);
+                    } else if (type.equals("ERROR")) {
+                        appendMessage("[Lỗi] " + msg);
+                    }
+                    return;
+                }
+            }
+        }
+
+        // 5. Chặn tuyệt đối không cho các đoạn mã hóa Base64 hoặc rác lọt ra khung chat chung
+        if (incoming.matches("^[A-Za-z0-9+/=]+$") && incoming.length() > 8) {
+            return; // Bỏ qua không in rác
+        }
+
+        // Các thông điệp thông thường khác
+        appendMessage(incoming);
+    }
+
+    private String decodeBase64Safe(String encoded) {
+        if (encoded == null) return "";
+        encoded = encoded.trim();
+        try {
+            byte[] decodedBytes = Base64.getDecoder().decode(encoded);
+            return new String(decodedBytes, StandardCharsets.UTF_8);
+        } catch (Exception e1) {
+            try {
+                String padded = encoded;
+                while (padded.length() % 4 != 0) {
+                    padded += "=";
+                }
+                return new String(Base64.getDecoder().decode(padded), StandardCharsets.UTF_8);
+            } catch (Exception e2) {
+                return encoded;
+            }
         }
     }
-    
-
+      
+    private void openPrivateChat(String targetUser) {
+        PrivateChat chatDialog = privateChatWindows.get(targetUser);
+        if (chatDialog == null || !chatDialog.isDisplayable()) {
+            chatDialog = new PrivateChat(this, targetUser, out);
+            privateChatWindows.put(targetUser, chatDialog);
+        }
+        chatDialog.setVisible(true);
+        chatDialog.toFront();
+    }
+      
     private void sendMessage() {
         String content = txtMessage.getText().trim();
-
         if (content.isEmpty()) {
             return;
         }
 
         String receiver = lstUsers.getSelectedValue();
 
-        if (receiver == null) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this, "Vui lòng chọn người nhận trước khi gửi.");
+        if (receiver != null && receiver.equals(username)) {
+            JOptionPane.showMessageDialog(this, "Bạn không thể gửi tin nhắn cho chính mình.");
             return;
-        }
-
-        if (receiver.equals(username)) {
-        javax.swing.JOptionPane.showMessageDialog(
-                this, "Bạn không thể gửi tin nhắn cho chính mình.");
-        return;
         }
 
         boolean failed;
         synchronized (sendLock) {
-            out.println("@" + receiver + " " + content);
+            if (receiver != null && !receiver.isEmpty()) {
+                out.println("@private|" + receiver + "|" + content);
+            } else {
+                out.println(content);
+            }
             failed = out.checkError();
         }
 
@@ -439,34 +586,40 @@ public class frmChat extends javax.swing.JFrame {
             return;
         }
 
-        appendMessage("[Bạn → " + receiver + "] " + content);
+        if (receiver != null && !receiver.isEmpty()) {
+            appendMessage("[Bạn → " + receiver + " (Private)]: " + content);
+            openPrivateChat(receiver);
+            PrivateChat win = privateChatWindows.get(receiver);
+            if (win != null) {
+                win.appendMessage("[Bạn → " + receiver + "]: " + content);
+            }
+            lstUsers.clearSelection();
+        } else {
+            appendMessage("[Bạn (Group)]: " + content);
+        }
+
         txtMessage.setText("");
         txtMessage.requestFocus();
     }
 
     public void refreshUsers() {
-        if (socket != null && !socket.isClosed()) {
-            out.println("/users");
+        synchronized (sendLock) {
+            out.println("/list");
         }
     }
 
     
     private void updateUsers(String onlineUsers) {
         String selected = lstUsers.getSelectedValue();
-
         userModel.clear();
-
         int totalOnline = 0;
 
         if (onlineUsers != null && !onlineUsers.trim().isEmpty()) {
             String[] names = onlineUsers.split(",");
-
             for (String name : names) {
                 String trimmed = name.trim();
-
                 if (!trimmed.isEmpty()) {
                     totalOnline++;
-
                     if (!trimmed.equals(username)) {
                         userModel.addElement(trimmed);
                     }
@@ -480,44 +633,27 @@ public class frmChat extends javax.swing.JFrame {
 
         lblStatus.setText("Đã kết nối | Online: " + totalOnline);
     }
-
+    
 
     private void appendMessage(String message) {
-        txtChat.append(message + "\n");
-        txtChat.setCaretPosition(txtChat.getDocument().getLength());
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            txtChat.append(message + "\n");
+            txtChat.setCaretPosition(txtChat.getDocument().getLength());
+        });
     }
 
     private void disconnect() {
-        if (closing) {
-            return;
-        }
-
-        int choice = javax.swing.JOptionPane.showConfirmDialog(
-            this,
-            "Bạn có muốn đăng xuất không?",
-            "Xác nhận",
-            javax.swing.JOptionPane.YES_NO_OPTION
-        );
-
-        if (choice != javax.swing.JOptionPane.YES_OPTION) {
-            return;
-        }
-
-        closing = true;
-
         try {
-            if (out != null) {
+            synchronized (sendLock) {
                 out.println("/quit");
             }
-
             if (socket != null && !socket.isClosed()) {
                 socket.close();
             }
-        } catch (java.io.IOException e) {
-            System.err.println("Lỗi đóng kết nối: " + e.getMessage());
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-
-        dispose();
+        System.exit(0);
     }
 
     /**
@@ -580,6 +716,11 @@ public class frmChat extends javax.swing.JFrame {
         btnSend.setBackground(new java.awt.Color(0, 255, 0));
         btnSend.setFont(new java.awt.Font("Segoe UI", 0, 14)); // NOI18N
         btnSend.setText("Gửi");
+        btnSend.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnSendActionPerformed(evt);
+            }
+        });
 
         btnSendFile.setText("File");
         btnSendFile.addActionListener(new java.awt.event.ActionListener() {
@@ -720,6 +861,32 @@ public class frmChat extends javax.swing.JFrame {
             }).start();
         }
     }//GEN-LAST:event_btnSendFileActionPerformed
+private String currentUsername;
+    private void btnSendActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnSendActionPerformed
+String messageContent = txtMessage.getText().trim();
+if (messageContent.isEmpty()) {
+    return;
+}
+
+// Lấy tên người được chọn trong danh sách trực tuyến (JList)
+String selectedUser = lstUsers.getSelectedValue();
+
+// Kiểm tra nếu có chọn người nhận cụ thể và không phải là chính mình
+if (selectedUser != null && !selectedUser.equals(currentUsername)) {
+    // Gửi tin nhắn riêng 1-1 qua Server
+    out.println("@private|" + selectedUser + "|" + messageContent);
+    // Hiển thị lên khung chat giao diện của chính mình
+    txtChat.append("[Bạn → " + selectedUser + " (Private)]: " + messageContent + "\n");
+} else {
+    // Không chọn ai trong danh sách -> Gửi chat chung cho tất cả mọi người
+    out.println(messageContent);
+    txtChat.append("[Bạn (Group)]: " + messageContent + "\n");
+}
+
+// Xóa ô nhập văn bản và cuộn khung chat xuống dòng mới nhất
+txtMessage.setText("");
+txtChat.setCaretPosition(txtChat.getDocument().getLength());        // TODO add your handling code here:
+    }//GEN-LAST:event_btnSendActionPerformed
 
     /**
      * @param args the command line arguments
@@ -768,11 +935,7 @@ public class frmChat extends javax.swing.JFrame {
         //</editor-fold>
 
         /* Create and display the form */
-        java.awt.EventQueue.invokeLater(new Runnable() {
-            public void run() {
-                new frmChat().setVisible(true);
-            }
-        });
+        
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables

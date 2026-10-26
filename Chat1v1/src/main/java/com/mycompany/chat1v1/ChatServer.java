@@ -95,6 +95,7 @@ public class ChatServer {
 
                 Database.registerUser(username);
                 out.println("INFO|Phong chat chung da san sang. Nhap tin nhan de gui cho tat ca.");
+                out.println("INFO|Cu phap chat rieng: @private|tenNguoiNhan|noiDung");
                 out.println("INFO|Cu phap gui file: @file tenNguoiNhan tenFile kichThuocBytes");
                 out.println("INFO|Nhap /users de xem danh sach nguoi dung.");
                 out.println("INFO|Nhap /quit de thoat.");
@@ -116,6 +117,12 @@ public class ChatServer {
 
                     if (message.startsWith("@file|")) {
                         handleFileTransfer(rawIn, message);
+                        continue;
+                    }
+
+                    // Xử lý tin nhắn chat riêng 1-1 từ GUI hoặc Client gửi lên
+                    if (message.startsWith("@private|")) {
+                        handlePrivateMessage(message);
                         continue;
                     }
 
@@ -174,6 +181,48 @@ public class ChatServer {
 
             Database.saveMessage(username, "ALL", encryptedContent);
             System.out.println("[" + username + " -> GROUP]: " + encryptedContent);
+        }
+
+        // Xử lý định tuyến tin nhắn chat riêng 1-1 và mã hóa Base64
+        private void handlePrivateMessage(String message) {
+            String[] parts = message.split("\\|", 3);
+            if (parts.length < 3) {
+                out.println("ERROR|Sai cu phap chat rieng. Dung: @private|tenNguoiNhan|noiDung");
+                return;
+            }
+
+            String receiverName = parts[1];
+            String content = parts[2];
+
+            if (content.trim().isEmpty()) {
+                return;
+            }
+
+            ClientHandler receiver = clients.get(receiverName);
+            if (receiver == null) {
+                out.println("ERROR|Nguoi dung " + receiverName + " khong online.");
+                return;
+            }
+
+            if (receiver == this) {
+                out.println("ERROR|Ban khong the chat rieng với chinh minh.");
+                return;
+            }
+
+            String encryptedContent = Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8));
+            String privateMsgResponse = "PRIVATE_MSG|" + username + "|" + encryptedContent;
+
+            // Gửi đến máy người nhận
+            receiver.send(privateMsgResponse);
+            
+            // Lưu vào database tin nhắn riêng
+            try {
+                Database.saveMessage(username, receiverName, encryptedContent);
+            } catch (Exception e) {
+                // Đề phòng lỗi cơ sở dữ liệu nếu có
+            }
+
+            System.out.println("[" + username + " -> " + receiverName + " (PRIVATE)]: " + encryptedContent);
         }
 
         private void handleFileTransfer(InputStream rawIn, String headerMessage) throws IOException {

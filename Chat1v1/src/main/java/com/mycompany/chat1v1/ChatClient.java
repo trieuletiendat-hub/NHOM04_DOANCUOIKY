@@ -47,6 +47,7 @@ public class ChatClient {
 
             System.out.println(response.substring(3));
             System.out.println("Ban co the bat dau nhan tin trong phong chat chung.");
+            System.out.println("Huong dan chat rieng: @private tenNguoiNhan noiDung");
 
             Thread receiverThread = new Thread(() -> {
                 try {
@@ -56,6 +57,7 @@ public class ChatClient {
                         String[] parts = incoming.split("\\|", 3);
 
                         if (parts.length >= 2 && parts[0].equals("MSG")) {
+                            // Xử lý tin nhắn chat nhóm chung (Giải mã Base64)
                             String sender = parts[1];
                             String encryptedContent = parts.length == 3 ? parts[2] : "";
                             String content;
@@ -65,6 +67,18 @@ public class ChatClient {
                                 content = encryptedContent;
                             }
                             System.out.println("\n[" + sender + "]: " + content);
+                            System.out.print("Ban: ");
+                        } else if (parts.length >= 2 && parts[0].equals("PRIVATE_MSG")) {
+                            // Xử lý tin nhắn chat riêng 1-1 (Giải mã Base64)
+                            String sender = parts[1];
+                            String encryptedContent = parts.length == 3 ? parts[2] : "";
+                            String content;
+                            try {
+                                content = new String(Base64.getDecoder().decode(encryptedContent), StandardCharsets.UTF_8);
+                            } catch (Exception e) {
+                                content = encryptedContent;
+                            }
+                            System.out.println("\n[Private từ " + sender + "]: " + content);
                             System.out.print("Ban: ");
                         } else if (parts.length >= 2) {
                             System.out.println("\n" + parts[1]);
@@ -87,6 +101,19 @@ public class ChatClient {
                 String message = scanner.nextLine();
 
                 if (message.trim().isEmpty()) {
+                    continue;
+                }
+
+                // Xử lý cú pháp gửi tin nhắn riêng: @private tenNguoiNhan noiDung
+                if (message.startsWith("@private ")) {
+                    String[] parts = message.split(" ", 3);
+                    if (parts.length < 3) {
+                        System.out.println("Sai cu phap. Vi du: @private tenNguoiNhan Chao ban");
+                        continue;
+                    }
+                    String receiver = parts[1];
+                    String content = parts[2];
+                    out.println("@private|" + receiver + "|" + content);
                     continue;
                 }
 
