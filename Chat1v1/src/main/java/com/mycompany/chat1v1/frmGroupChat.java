@@ -13,6 +13,12 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+
+import java.net.Socket;
+import java.nio.file.Files;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+
 /**
  *
  * @author TienDat
@@ -24,6 +30,7 @@ private final Color BACKGROUND = new Color(15, 23, 42);
     private final Color TEXT = new Color(226, 232, 240);
     private final Color MUTED = new Color(148, 163, 184);
     private DefaultListModel<String> memberModel = new DefaultListModel<>();
+    private String host;
    // ===== COMPONENT =====
 
     private JLabel lblStatus;
@@ -33,14 +40,25 @@ private final Color BACKGROUND = new Color(15, 23, 42);
     private volatile BufferedReader reader;
     private volatile PrintWriter writer;
     private volatile boolean connected = false;
-
+    
     private String username = "Guest";
+    private volatile Socket fileReceiveSocket;
+private volatile boolean fileReceiverRunning = false;
+
+private static final long MAX_FILE_SIZE =
+        50L * 1024 * 1024;
     /**
      * Creates new form frmGroupChatt
      */
     public frmGroupChat() {
         initComponents();
-        lstMembers.setModel(memberModel);
+       txtUsername.setText(username);
+    
+    txtHost.setText(host);
+    
+
+    // Tự động kết nối group chat
+    btnConnectActionPerformed(null);
     }
 
     /**
@@ -68,6 +86,7 @@ private final Color BACKGROUND = new Color(15, 23, 42);
         jLabel5 = new javax.swing.JLabel();
         jScrollPane3 = new javax.swing.JScrollPane();
         txtChat = new javax.swing.JTextArea();
+        btnSendFile = new javax.swing.JButton();
         jLabel1 = new javax.swing.JLabel();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
@@ -169,6 +188,13 @@ private final Color BACKGROUND = new Color(15, 23, 42);
         txtChat.setRows(5);
         jScrollPane3.setViewportView(txtChat);
 
+        btnSendFile.setText("Gửi Tệp");
+        btnSendFile.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnSendFileActionPerformed(evt);
+            }
+        });
+
         javax.swing.GroupLayout jPanel2Layout = new javax.swing.GroupLayout(jPanel2);
         jPanel2.setLayout(jPanel2Layout);
         jPanel2Layout.setHorizontalGroup(
@@ -185,7 +211,9 @@ private final Color BACKGROUND = new Color(15, 23, 42);
                             .addGroup(jPanel2Layout.createSequentialGroup()
                                 .addComponent(txtMessage, javax.swing.GroupLayout.PREFERRED_SIZE, 319, javax.swing.GroupLayout.PREFERRED_SIZE)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(btnSend, javax.swing.GroupLayout.PREFERRED_SIZE, 80, javax.swing.GroupLayout.PREFERRED_SIZE)))))
+                                .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                    .addComponent(btnSendFile)
+                                    .addComponent(btnSend, javax.swing.GroupLayout.PREFERRED_SIZE, 80, javax.swing.GroupLayout.PREFERRED_SIZE))))))
                 .addContainerGap(115, Short.MAX_VALUE))
         );
         jPanel2Layout.setVerticalGroup(
@@ -199,7 +227,9 @@ private final Color BACKGROUND = new Color(15, 23, 42);
                 .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(txtMessage, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(btnSend))
-                .addContainerGap(138, Short.MAX_VALUE))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(btnSendFile)
+                .addContainerGap(109, Short.MAX_VALUE))
         );
 
         jLabel1.setFont(new java.awt.Font("Segoe UI", 0, 24)); // NOI18N
@@ -246,7 +276,7 @@ private final Color BACKGROUND = new Color(15, 23, 42);
 
     private void btnConnectActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnConnectActionPerformed
 
-
+    
     String host = txtHost.getText().trim();
     username = txtUsername.getText().trim();
 
@@ -293,7 +323,9 @@ private final Color BACKGROUND = new Color(15, 23, 42);
                 txtUsername.setEnabled(false);
 
                 appendMessage("[SYSTEM] Đã kết nối Server: " + host);
+            startFileReceiver(host);
             });
+            startFileReceiver(host);
 
            
 String message;
@@ -379,7 +411,19 @@ String message = txtMessage.getText().trim();
     }//GEN-LAST:event_btnSendActionPerformed
 
     private void btnDisconnectActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnDisconnectActionPerformed
-connected = false;
+
+fileReceiverRunning = false;
+
+try {
+    if (fileReceiveSocket != null) {
+        fileReceiveSocket.close();
+    }
+} catch (IOException ignored) {
+}
+
+fileReceiveSocket = null;
+
+        connected = false;
 
     try {
         if (socket != null) {
@@ -389,6 +433,25 @@ connected = false;
         ex.printStackTrace();
     }      // TODO add your handling code here:
     }//GEN-LAST:event_btnDisconnectActionPerformed
+
+    private void btnSendFileActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnSendFileActionPerformed
+    
+javax.swing.JFileChooser chooser =
+        new javax.swing.JFileChooser();
+
+chooser.setDialogTitle("Chọn tệp cần gửi");
+
+int result = chooser.showOpenDialog(this);
+
+if (result == javax.swing.JFileChooser.APPROVE_OPTION) {
+    java.io.File file = chooser.getSelectedFile();
+    sendFile(file);
+
+
+
+        // Bước tiếp theo: gửi file qua GroupFileServer.
+    }       // TODO add your handling code here:
+    }//GEN-LAST:event_btnSendFileActionPerformed
 private void appendMessage(String message) {
     txtChat.append(message + "\n");
     txtChat.setCaretPosition(
@@ -410,6 +473,173 @@ private void updateMembers(String names) {
             memberModel.addElement(trimmedName);
         }
     }
+}
+
+private void startFileReceiver(String serverHost) {
+    if (fileReceiverRunning) {
+        return;
+    }
+
+    fileReceiverRunning = true;
+
+    Thread thread = new Thread(() -> {
+        try (Socket s = new Socket(serverHost, 5002)) {
+            fileReceiveSocket = s;
+
+            DataOutputStream handshake =
+                    new DataOutputStream(s.getOutputStream());
+
+            handshake.writeUTF("LISTEN");
+            handshake.writeUTF(username);
+            handshake.flush();
+
+            DataInputStream in =
+                    new DataInputStream(s.getInputStream());
+
+            while (fileReceiverRunning && !s.isClosed()) {
+                String sender = in.readUTF();
+                String filename = in.readUTF();
+                long size = in.readLong();
+
+                if (size < 0 || size > MAX_FILE_SIZE) {
+                    throw new IOException(
+                            "Kich thuoc tep khong hop le.");
+                }
+
+                byte[] data = new byte[(int) size];
+                in.readFully(data);
+
+                SwingUtilities.invokeLater(() -> {
+                    int choice = JOptionPane.showConfirmDialog(
+                            this,
+                            sender + " gửi tệp: " + filename
+                            + "\nKích thước: " + size + " bytes"
+                            + "\nBạn có muốn lưu tệp không?",
+                            "Nhận tệp",
+                            JOptionPane.YES_NO_OPTION
+                    );
+
+                    if (choice == JOptionPane.YES_OPTION) {
+                        saveReceivedFile(filename, data);
+                    }
+                });
+            }
+
+        } catch (IOException e) {
+            if (fileReceiverRunning) {
+                SwingUtilities.invokeLater(() ->
+                    appendMessage(
+                        "[FILE] Mất kết nối nhận tệp: "
+                        + e.getMessage())
+                );
+            }
+        } finally {
+            fileReceiverRunning = false;
+            fileReceiveSocket = null;
+        }
+    }, "GroupFileReceiver");
+
+    thread.setDaemon(true);
+    thread.start();
+}
+
+private void saveReceivedFile(String filename, byte[] data) {
+    JFileChooser chooser = new JFileChooser();
+    chooser.setSelectedFile(new java.io.File(filename));
+    chooser.setDialogTitle("Lưu tệp nhận được");
+
+    if (chooser.showSaveDialog(this)
+            != JFileChooser.APPROVE_OPTION) {
+        return;
+    }
+
+    java.io.File destination = chooser.getSelectedFile();
+
+    if (destination.exists()) {
+        int overwrite = JOptionPane.showConfirmDialog(
+                this,
+                "Tệp đã tồn tại. Bạn có muốn ghi đè không?",
+                "Xác nhận",
+                JOptionPane.YES_NO_OPTION
+        );
+
+        if (overwrite != JOptionPane.YES_OPTION) {
+            return;
+        }
+    }
+
+    try {
+        Files.write(destination.toPath(), data);
+        appendMessage("[FILE] Đã lưu tệp: "
+                + destination.getAbsolutePath());
+    } catch (IOException e) {
+        JOptionPane.showMessageDialog(
+                this, "Không thể lưu tệp: " + e.getMessage());
+    }
+}
+
+private void sendFile(java.io.File file) {
+    if (!connected) {
+        JOptionPane.showMessageDialog(
+                this, "Hãy kết nối Group Chat trước.");
+        return;
+    }
+
+    if (!file.isFile() || !file.canRead()) {
+        JOptionPane.showMessageDialog(
+                this, "Không thể đọc tệp đã chọn.");
+        return;
+    }
+
+    long size = file.length();
+
+    if (size > MAX_FILE_SIZE) {
+        JOptionPane.showMessageDialog(
+                this, "Chỉ gửi tệp tối đa 50 MB.");
+        return;
+    }
+
+    String serverHost = txtHost.getText().trim();
+    String sender = username;
+
+    Thread thread = new Thread(() -> {
+        try (Socket s = new Socket(serverHost, 5002);
+             DataOutputStream out =
+                     new DataOutputStream(s.getOutputStream());
+             FileInputStream fileIn =
+                     new FileInputStream(file)) {
+
+            out.writeUTF("UPLOAD");
+            out.writeUTF(sender);
+            out.writeUTF(file.getName());
+            out.writeLong(size);
+
+            byte[] buffer = new byte[8192];
+            int count;
+
+            while ((count = fileIn.read(buffer)) != -1) {
+                out.write(buffer, 0, count);
+            }
+
+            out.flush();
+
+            SwingUtilities.invokeLater(() ->
+                appendMessage("[FILE] Bạn đã gửi: "
+                        + file.getName())
+            );
+
+        } catch (IOException e) {
+            SwingUtilities.invokeLater(() ->
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Gửi tệp thất bại: " + e.getMessage()
+                )
+            );
+        }
+    }, "GroupFileSender");
+
+    thread.setDaemon(true);
+    thread.start();
 }
 
     /**
@@ -453,7 +683,6 @@ private void updateMembers(String names) {
     private javax.swing.JButton btnDisconnect;
     private javax.swing.JButton btnSend;
     private javax.swing.JButton btnSendFile;
-    private javax.swing.JButton btnSendFile1;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel3;
