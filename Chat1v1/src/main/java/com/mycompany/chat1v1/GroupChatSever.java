@@ -119,7 +119,16 @@ public class GroupChatSever {
                     }
 
                     if (!message.isBlank()) {
+                        // 1. Phát tin nhắn đến tất cả các thành viên đang online trong nhóm
                         broadcast(username + ": " + message);
+
+                        // 2. Lưu tin nhắn vào Bảng Cơ sở dữ liệu
+                        // "GROUP" đánh dấu đây là tin nhắn gửi chung trong phòng nhóm
+                        try {
+                            Database.saveMessage(username, "GROUP", message);
+                        } catch (Exception e) {
+                            System.err.println("Lỗi khi lưu tin nhắn Group Chat vào Database: " + e.getMessage());
+                        }
                     }
                 }
 
