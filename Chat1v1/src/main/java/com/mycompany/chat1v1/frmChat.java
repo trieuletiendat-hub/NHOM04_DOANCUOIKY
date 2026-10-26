@@ -739,17 +739,19 @@ public class frmChat extends javax.swing.JFrame {
 
     private void btnJoinGroupActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnJoinGroupActionPerformed
 if (socket == null || socket.isClosed() || username == null) {
-        JOptionPane.showMessageDialog(
-            this,
-            "Bạn cần đăng nhập vào chat 1-1 trước."
-        );
-        return;
-    }
+            javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "Bạn cần đăng nhập hệ thống trước."
+            );
+            return;
+        }
 
-    String groupHost = socket.getInetAddress().getHostAddress();
+        // Lấy địa chỉ IP của server từ socket hiện tại đang kết nối 1-1
+        String groupHost = socket.getInetAddress().getHostAddress();
 
-  frmGroupChat groupForm = new frmGroupChat();
-groupForm.setVisible(true);        // TODO add your handling code here:
+        // Mở khung Group Chat và truyền thẳng 'username' và 'groupHost' sang
+        frmGroupChat groupForm = new frmGroupChat(username, groupHost);
+        groupForm.setVisible(true);
     }//GEN-LAST:event_btnJoinGroupActionPerformed
 
     /**

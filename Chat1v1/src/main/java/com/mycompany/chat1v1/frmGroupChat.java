@@ -50,15 +50,101 @@ private static final long MAX_FILE_SIZE =
     /**
      * Creates new form frmGroupChatt
      */
+    // Constructor mặc định (phòng hờ)
     public frmGroupChat() {
         initComponents();
-       txtUsername.setText(username);
-    
-    txtHost.setText(host);
-    
+        setupUIState();
+    }
 
-    // Tự động kết nối group chat
-    btnConnectActionPerformed(null);
+    // Constructor mới nhận trực tiếp username và host từ frmChat truyền sang
+    public frmGroupChat(String username, String host) {
+        initComponents();
+        this.username = (username == null || username.isEmpty()) ? "Guest" : username;
+        this.host = (host == null || host.isEmpty()) ? "localhost" : host;
+        
+        // Đưa thông tin vào các ô hiển thị
+        txtUsername.setText(this.username);
+        txtHost.setText(this.host);
+        
+        // Khóa các ô nhập liệu và ẩn nút kết nối thủ công vì đã tự động hóa hoàn toàn
+        txtUsername.setEnabled(false);
+        txtHost.setEnabled(false);
+        btnConnect.setVisible(false);
+
+        setupUIState();
+        
+        // Tự động chạy tiến trình kết nối vào group chat server
+        autoConnectGroup();
+    }
+
+    private void setupUIState() {
+        setLocationRelativeTo(null);
+        setTitle("Group Chat Chung - " + username);
+        setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
+        lstMembers.setModel(memberModel);
+    }
+
+    private void autoConnectGroup() {
+        Thread thread = new Thread(() -> {
+            Socket newSocket = null;
+            try {
+                newSocket = new Socket(host, 5001);
+
+                BufferedReader newReader = new BufferedReader(
+                    new InputStreamReader(newSocket.getInputStream(), StandardCharsets.UTF_8)
+                );
+
+                PrintWriter newWriter = new PrintWriter(
+                    newSocket.getOutputStream(), true, StandardCharsets.UTF_8
+                );
+
+                // Gửi tên người dùng đến Group Chat Server (Cổng 5001)
+                newWriter.println(username);
+
+                socket = newSocket;
+                reader = newReader;
+                writer = newWriter;
+                connected = true;
+
+                SwingUtilities.invokeLater(() -> {
+                    btnSend.setEnabled(true);
+                    appendMessage("[SYSTEM] Đã tự động tham gia Group Chat thành công!");
+                });
+
+                startFileReceiver(host);
+
+                String message;
+                while (connected && (message = newReader.readLine()) != null) {
+                    if (message.startsWith("[MEMBERS]")) {
+                        String names = message.substring("[MEMBERS]".length());
+                        SwingUtilities.invokeLater(() -> updateMembers(names));
+                    } else {
+                        String received = message;
+                        SwingUtilities.invokeLater(() -> appendMessage(received));
+                    }
+                }
+
+            } catch (IOException ex) {
+                SwingUtilities.invokeLater(() ->
+                    JOptionPane.showMessageDialog(
+                        this,
+                        "Không thể kết nối đến Group Chat Server (Cổng 5001)!\n" + ex.getMessage()
+                    )
+                );
+            } finally {
+                if (newSocket != null) {
+                    try {
+                        newSocket.close();
+                    } catch (IOException ignored) {}
+                }
+                socket = null;
+                reader = null;
+                writer = null;
+                connected = false;
+            }
+        });
+        thread.setDaemon(true);
+        thread.start();
     }
 
     /**
@@ -71,12 +157,6 @@ private static final long MAX_FILE_SIZE =
     private void initComponents() {
 
         jPanel1 = new javax.swing.JPanel();
-        jLabel2 = new javax.swing.JLabel();
-        txtHost = new javax.swing.JTextField();
-        jLabel3 = new javax.swing.JLabel();
-        txtUsername = new javax.swing.JTextField();
-        btnConnect = new javax.swing.JButton();
-        btnDisconnect = new javax.swing.JButton();
         jScrollPane2 = new javax.swing.JScrollPane();
         lstMembers = new javax.swing.JList<>();
         jLabel4 = new javax.swing.JLabel();
@@ -87,27 +167,14 @@ private static final long MAX_FILE_SIZE =
         jScrollPane3 = new javax.swing.JScrollPane();
         txtChat = new javax.swing.JTextArea();
         btnSendFile = new javax.swing.JButton();
+        btnConnect = new javax.swing.JButton();
         jLabel1 = new javax.swing.JLabel();
+        txtHost = new javax.swing.JTextField();
+        jLabel2 = new javax.swing.JLabel();
+        jLabel3 = new javax.swing.JLabel();
+        txtUsername = new javax.swing.JTextField();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
-
-        jLabel2.setText("Sever IP");
-
-        jLabel3.setText("Tên người dùng");
-
-        btnConnect.setText("Kết nối");
-        btnConnect.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                btnConnectActionPerformed(evt);
-            }
-        });
-
-        btnDisconnect.setText("Ngắt kết nối");
-        btnDisconnect.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                btnDisconnectActionPerformed(evt);
-            }
-        });
 
         jScrollPane2.setViewportView(lstMembers);
 
@@ -120,53 +187,20 @@ private static final long MAX_FILE_SIZE =
             .addGroup(jPanel1Layout.createSequentialGroup()
                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addGroup(jPanel1Layout.createSequentialGroup()
-                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addGroup(jPanel1Layout.createSequentialGroup()
-                                .addGap(17, 17, 17)
-                                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                    .addComponent(jLabel3)
-                                    .addComponent(jLabel4)))
-                            .addGroup(jPanel1Layout.createSequentialGroup()
-                                .addGap(43, 43, 43)
-                                .addComponent(btnConnect))
-                            .addGroup(jPanel1Layout.createSequentialGroup()
-                                .addGap(33, 33, 33)
-                                .addComponent(btnDisconnect))
-                            .addGroup(jPanel1Layout.createSequentialGroup()
-                                .addGap(16, 16, 16)
-                                .addComponent(jLabel2)))
-                        .addGap(0, 0, Short.MAX_VALUE))
-                    .addGroup(jPanel1Layout.createSequentialGroup()
                         .addContainerGap()
-                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(txtHost)
-                            .addComponent(txtUsername))))
-                .addContainerGap())
-            .addGroup(jPanel1Layout.createSequentialGroup()
-                .addContainerGap()
-                .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 138, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 138, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addGroup(jPanel1Layout.createSequentialGroup()
+                        .addGap(14, 14, 14)
+                        .addComponent(jLabel4)))
                 .addContainerGap(33, Short.MAX_VALUE))
         );
         jPanel1Layout.setVerticalGroup(
             jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel1Layout.createSequentialGroup()
-                .addGap(29, 29, 29)
-                .addComponent(jLabel2)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(txtHost, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(27, 27, 27)
-                .addComponent(jLabel3)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(txtUsername, javax.swing.GroupLayout.PREFERRED_SIZE, 28, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(24, 24, 24)
-                .addComponent(btnConnect)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                .addComponent(btnDisconnect)
-                .addGap(29, 29, 29)
                 .addComponent(jLabel4)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 122, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(12, Short.MAX_VALUE))
+                .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 265, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(130, Short.MAX_VALUE))
         );
 
         txtMessage.addActionListener(new java.awt.event.ActionListener() {
@@ -195,46 +229,62 @@ private static final long MAX_FILE_SIZE =
             }
         });
 
+        btnConnect.setText("Kết nối");
+        btnConnect.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnConnectActionPerformed(evt);
+            }
+        });
+
         javax.swing.GroupLayout jPanel2Layout = new javax.swing.GroupLayout(jPanel2);
         jPanel2.setLayout(jPanel2Layout);
         jPanel2Layout.setHorizontalGroup(
             jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel2Layout.createSequentialGroup()
+                .addGap(26, 26, 26)
                 .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(jScrollPane3, javax.swing.GroupLayout.PREFERRED_SIZE, 461, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addGroup(jPanel2Layout.createSequentialGroup()
-                        .addGap(43, 43, 43)
-                        .addComponent(jLabel5))
-                    .addGroup(jPanel2Layout.createSequentialGroup()
-                        .addGap(26, 26, 26)
-                        .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(jScrollPane3, javax.swing.GroupLayout.PREFERRED_SIZE, 405, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addGroup(jPanel2Layout.createSequentialGroup()
-                                .addComponent(txtMessage, javax.swing.GroupLayout.PREFERRED_SIZE, 319, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                    .addComponent(btnSendFile)
-                                    .addComponent(btnSend, javax.swing.GroupLayout.PREFERRED_SIZE, 80, javax.swing.GroupLayout.PREFERRED_SIZE))))))
-                .addContainerGap(115, Short.MAX_VALUE))
+                        .addComponent(txtMessage, javax.swing.GroupLayout.PREFERRED_SIZE, 319, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(btnSend, javax.swing.GroupLayout.PREFERRED_SIZE, 58, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(btnSendFile)))
+                .addContainerGap(59, Short.MAX_VALUE))
+            .addGroup(jPanel2Layout.createSequentialGroup()
+                .addGap(43, 43, 43)
+                .addComponent(jLabel5)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(btnConnect)
+                .addGap(20, 20, 20))
         );
         jPanel2Layout.setVerticalGroup(
             jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel2Layout.createSequentialGroup()
                 .addContainerGap()
-                .addComponent(jLabel5)
-                .addGap(9, 9, 9)
+                .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(jPanel2Layout.createSequentialGroup()
+                        .addComponent(jLabel5)
+                        .addGap(9, 9, 9))
+                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel2Layout.createSequentialGroup()
+                        .addComponent(btnConnect)
+                        .addGap(18, 18, 18)))
                 .addComponent(jScrollPane3, javax.swing.GroupLayout.PREFERRED_SIZE, 210, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addGap(16, 16, 16)
                 .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(txtMessage, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(btnSend))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(btnSendFile)
-                .addContainerGap(109, Short.MAX_VALUE))
+                    .addComponent(btnSend)
+                    .addComponent(btnSendFile))
+                .addContainerGap(134, Short.MAX_VALUE))
         );
 
         jLabel1.setFont(new java.awt.Font("Segoe UI", 0, 24)); // NOI18N
         jLabel1.setText("GroupChat");
         jLabel1.setMaximumSize(new java.awt.Dimension(100, 16));
+
+        jLabel2.setText("Sever IP");
+
+        jLabel3.setText("Tên người dùng");
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
@@ -243,7 +293,15 @@ private static final long MAX_FILE_SIZE =
             .addGroup(layout.createSequentialGroup()
                 .addGap(40, 40, 40)
                 .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                .addGap(51, 51, 51)
+                .addComponent(jLabel3)
+                .addGap(18, 18, 18)
+                .addComponent(txtUsername, javax.swing.GroupLayout.PREFERRED_SIZE, 96, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(76, 76, 76)
+                .addComponent(jLabel2)
+                .addGap(32, 32, 32)
+                .addComponent(txtHost)
+                .addGap(48, 48, 48))
             .addGroup(layout.createSequentialGroup()
                 .addGap(28, 28, 28)
                 .addComponent(jPanel1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -255,7 +313,12 @@ private static final long MAX_FILE_SIZE =
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
                 .addGap(27, 27, 27)
-                .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 44, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 44, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(txtHost, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jLabel2)
+                    .addComponent(jLabel3)
+                    .addComponent(txtUsername, javax.swing.GroupLayout.PREFERRED_SIZE, 28, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addGroup(layout.createSequentialGroup()
                         .addGap(27, 27, 27)
@@ -317,7 +380,6 @@ private static final long MAX_FILE_SIZE =
 
             SwingUtilities.invokeLater(() -> {
                 btnConnect.setEnabled(false);
-                btnDisconnect.setEnabled(true);
                 btnSend.setEnabled(true);
                 txtHost.setEnabled(false);
                 txtUsername.setEnabled(false);
@@ -376,7 +438,6 @@ while (connected &&
 
                 SwingUtilities.invokeLater(() -> {
                     btnConnect.setEnabled(true);
-                    btnDisconnect.setEnabled(false);
                     btnSend.setEnabled(false);
                     txtHost.setEnabled(true);
                     txtUsername.setEnabled(true);
@@ -409,30 +470,6 @@ String message = txtMessage.getText().trim();
 
     }        // TODO add your handling code here:
     }//GEN-LAST:event_btnSendActionPerformed
-
-    private void btnDisconnectActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnDisconnectActionPerformed
-
-fileReceiverRunning = false;
-
-try {
-    if (fileReceiveSocket != null) {
-        fileReceiveSocket.close();
-    }
-} catch (IOException ignored) {
-}
-
-fileReceiveSocket = null;
-
-        connected = false;
-
-    try {
-        if (socket != null) {
-            socket.close();
-        }
-    } catch (IOException ex) {
-        ex.printStackTrace();
-    }      // TODO add your handling code here:
-    }//GEN-LAST:event_btnDisconnectActionPerformed
 
     private void btnSendFileActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnSendFileActionPerformed
     
@@ -680,7 +717,6 @@ private void sendFile(java.io.File file) {
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton btnConnect;
-    private javax.swing.JButton btnDisconnect;
     private javax.swing.JButton btnSend;
     private javax.swing.JButton btnSendFile;
     private javax.swing.JLabel jLabel1;
