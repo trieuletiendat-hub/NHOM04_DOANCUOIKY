@@ -1,13 +1,5 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package com.mycompany.chat1v1;
 
-/**
- *
- * @author PhuongUyen
- */
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -17,10 +9,11 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Scanner;
 
 public class ChatClient {
-     private static final String HOST = "localhost";
+    private static final String HOST = "localhost";
     private static final int PORT = 5000;
 
     public static void main(String[] args) {
@@ -41,7 +34,6 @@ public class ChatClient {
              PrintWriter out = new PrintWriter(socket.getOutputStream(),
                      true, StandardCharsets.UTF_8)) {
 
-            // Gui thong tin dang nhap
             out.println("LOGIN " + username);
 
             String response = in.readLine();
@@ -54,9 +46,8 @@ public class ChatClient {
             }
 
             System.out.println(response.substring(3));
-            System.out.println("Ban co the bat dau nhan tin.");
+            System.out.println("Ban co the bat dau nhan tin trong phong chat chung.");
 
-            // Luong rieng de lien tuc nhan tin nhan tu Server
             Thread receiverThread = new Thread(() -> {
                 try {
                     String incoming;
@@ -66,7 +57,13 @@ public class ChatClient {
 
                         if (parts.length >= 2 && parts[0].equals("MSG")) {
                             String sender = parts[1];
-                            String content = parts.length == 3 ? parts[2] : "";
+                            String encryptedContent = parts.length == 3 ? parts[2] : "";
+                            String content;
+                            try {
+                                content = new String(Base64.getDecoder().decode(encryptedContent), StandardCharsets.UTF_8);
+                            } catch (Exception e) {
+                                content = encryptedContent;
+                            }
                             System.out.println("\n[" + sender + "]: " + content);
                             System.out.print("Ban: ");
                         } else if (parts.length >= 2) {
@@ -85,47 +82,51 @@ public class ChatClient {
             receiverThread.setDaemon(true);
             receiverThread.start();
 
-            // Doc tin nhan tu ban phim va gui den Server
-            // Doc tin nhan tu ban phim va gui den Server
-              while (true) {
-                  System.out.print("Ban: ");
-                  String message = scanner.nextLine();
+            while (true) {
+                System.out.print("Ban: ");
+                String message = scanner.nextLine();
 
-                  if (message.startsWith("@file ")) {
-                      // Cú pháp console: @file Bob C:\path\to\file.txt
-                      String[] parts = message.split(" ", 3);
-                      if (parts.length < 3) {
-                          System.out.println("Sai cu phap. Vi du: @file Bob C:/file.txt");
-                          continue;
-                      }
-                      String receiver = parts[1];
-                      File fileToSend = new File(parts[2]);
-                      if (!fileToSend.exists()) {
-                          System.out.println("File khong ton tai!");
-                          continue;
-                      }
+                if (message.trim().isEmpty()) {
+                    continue;
+                }
 
-                      out.println("@file " + receiver + " " + fileToSend.getName() + " " + fileToSend.length());
-                      
-                      OutputStream rawOut = socket.getOutputStream();
-                      FileInputStream fis = new FileInputStream(fileToSend);
-                      byte[] buffer = new byte[4096];
-                      int bytesRead;
-                      while ((bytesRead = fis.read(buffer)) != -1) {
-                          rawOut.write(buffer, 0, bytesRead);
-                      }
-                      rawOut.flush();
-                      fis.close();
-                      System.out.println("Da gui file thanh cong!");
-                      continue;
-                  }
+                if (message.startsWith("@file ")) {
+                    String[] parts = message.split(" ", 3);
+                    if (parts.length < 3) {
+                        System.out.println("Sai cu phap. Vi du: @file tenNguoiNhan C:/file.txt");
+                        continue;
+                    }
+                    String receiver = parts[1];
+                    File fileToSend = new File(parts[2]);
+                    if (!fileToSend.exists()) {
+                        System.out.println("File khong ton tai!");
+                        continue;
+                    }
 
-                  out.println(message);
+                    out.println("@file|" + receiver + "|" + fileToSend.getName() + "|" + fileToSend.length());
+                    
+                    OutputStream rawOut = socket.getOutputStream();
+                    FileInputStream fis = new FileInputStream(fileToSend);
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+                    while ((bytesRead = fis.read(buffer)) != -1) {
+                        rawOut.write(buffer, 0, bytesRead);
+                    }
+                    rawOut.flush();
+                    fis.close();
+                    System.out.println("Da gui file thanh cong!");
+                    continue;
+                }
 
-                  if (message.equalsIgnoreCase("/quit")) {
-                      break;
-                  }
-              }
+                if (message.startsWith("/")) {
+                    out.println(message);
+                    if (message.equalsIgnoreCase("/quit")) {
+                        break;
+                    }
+                } else {
+                    out.println(message);
+                }
+            }
 
         } catch (IOException e) {
             System.out.println("Khong the ket noi Server: "

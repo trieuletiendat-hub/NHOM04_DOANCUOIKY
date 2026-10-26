@@ -8,9 +8,13 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-
+/**
+ *
+ * @author Phuong Uyen
+ */
 public class ChatServer {
     private static final int PORT = 5000;
 
@@ -39,14 +43,12 @@ public class ChatServer {
         private final Socket socket;
         private PrintWriter out;
         private String username;
-        // Khóa ghi: không cho tin nhắn khác chen vào giữa lúc đang chuyển byte file
         private final Object writeLock = new Object();
 
         public ClientHandler(Socket socket) {
             this.socket = socket;
         }
 
-        // Hàm đọc dòng thủ công từng byte từ InputStream, tuyệt đối không bị lỗi buffer nhị phân
         private String readLineFromSocket(InputStream in) throws IOException {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             int b;
@@ -92,7 +94,7 @@ public class ChatServer {
                 out.println("OK|Dang nhap thanh cong voi ten " + username);
 
                 Database.registerUser(username);
-                out.println("INFO|Nhap @tenNguoiNhan noiDungDeGui de nhan tin.");
+                out.println("INFO|Phong chat chung da san sang. Nhap tin nhan de gui cho tat ca.");
                 out.println("INFO|Cu phap gui file: @file tenNguoiNhan tenFile kichThuocBytes");
                 out.println("INFO|Nhap /users de xem danh sach nguoi dung.");
                 out.println("INFO|Nhap /quit de thoat.");
@@ -117,7 +119,7 @@ public class ChatServer {
                         continue;
                     }
 
-                    sendPrivateMessage(message);
+                    broadcastChatMessage(message);
                 }
 
             } catch (IOException e) {
@@ -157,37 +159,21 @@ public class ChatServer {
             }
         }
 
-        private void sendPrivateMessage(String message) {
-            if (!message.startsWith("@") || !message.contains(" ")) {
-                out.println("ERROR|Sai cu phap. Vi du: @Bob Xin chao!");
+        private void broadcastChatMessage(String message) {
+            if (message.trim().isEmpty()) {
                 return;
             }
 
-            int separator = message.indexOf(' ');
-            String receiverName = message.substring(1, separator).trim();
-            String content = message.substring(separator + 1).trim();
+            String encryptedContent = Base64.getEncoder().encodeToString(message.getBytes(StandardCharsets.UTF_8));
 
-            if (receiverName.isEmpty() || content.isEmpty()) {
-                out.println("ERROR|Ten nguoi nhan va noi dung khong duoc de trong.");
-                return;
+            for (ClientHandler client : clients.values()) {
+                if (client != this && client.out != null) {
+                    client.send("MSG|" + username + "|" + encryptedContent);
+                }
             }
 
-            ClientHandler receiver = clients.get(receiverName);
-
-            if (receiver == null) {
-                out.println("ERROR|Nguoi dung " + receiverName + " khong online hoac khong ton tai.");
-                return;
-            }
-
-            if (receiver == this) {
-                out.println("ERROR|Ban khong te gui tin nhan cho chinh minh.");
-                return;
-            }
-
-            receiver.out.println("MSG|" + username + "|" + content);
-            out.println("SENT|Da gui tin nhan den " + receiverName + ".");
-            Database.saveMessage(username, receiverName, content);
-
+            Database.saveMessage(username, "ALL", encryptedContent);
+            System.out.println("[" + username + " -> GROUP]: " + encryptedContent);
         }
 
         private void handleFileTransfer(InputStream rawIn, String headerMessage) throws IOException {
@@ -226,7 +212,6 @@ public class ChatServer {
             long totalRead = 0;
 
             synchronized (receiver.writeLock) {
-                // Header điều khiển (dạng chữ) rồi đến byte thô của file
                 receiver.out.println("FILE_START|" + username + "|" + fileName + "|" + fileSize);
                 OutputStream rawOut = receiver.socket.getOutputStream();
 
@@ -242,7 +227,7 @@ public class ChatServer {
                         try {
                             rawOut.write(buffer, 0, bytesRead);
                         } catch (IOException e) {
-                            relayOk = false; // người nhận lỗi: vẫn đọc hết byte của người gửi
+                            relayOk = false;
                         }
                     }
                 }
