@@ -368,13 +368,27 @@ public class frmChat extends javax.swing.JFrame {
         return f;
     }
 
-      private void processMessage(String incoming) {
+    private void processMessage(String incoming) {
         String[] parts = incoming.split("\\|", 4);
 
         switch (parts[0]) {
             case "MSG":
                 if (parts.length >= 3) {
-                    appendMessage("[" + parts[1] + "] " + parts[2]);
+                    String sender = parts[1];
+                    String encryptedContent = parts[2];
+                    String decryptedContent = encryptedContent;
+
+                    // Tiến hành giải mã Base64 sang văn bản thường tiếng Việt (UTF-8)
+                    try {
+                        byte[] decodedBytes = java.util.Base64.getDecoder().decode(encryptedContent);
+                        decryptedContent = new String(decodedBytes, java.nio.charset.StandardCharsets.UTF_8);
+                    } catch (IllegalArgumentException e) {
+                        // Nếu nội dung không phải mã hóa Base64 thì giữ nguyên bản gốc
+                        decryptedContent = encryptedContent;
+                    }
+
+                    // Hiển thị nội dung đã giải mã lên khung chat
+                    appendMessage("[" + sender + "] " + decryptedContent);
                 }
                 break;
 
@@ -405,8 +419,6 @@ public class frmChat extends javax.swing.JFrame {
                 appendMessage(incoming);
         }
     }
-    
-
     private void sendMessage() {
         String content = txtMessage.getText().trim();
 
