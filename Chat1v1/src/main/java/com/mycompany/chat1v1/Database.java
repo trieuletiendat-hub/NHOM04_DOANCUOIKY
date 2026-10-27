@@ -14,7 +14,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 public class Database {
-    private static final String URL = "jdbc:mysql://localhost:3306/chat_db?useSSL=false&serverTimezone=UTC";
+    private static final String URL = "jdbc:mysql://localhost:3307/chat_db?useSSL=false&serverTimezone=UTC";
     private static final String USER = "root"; // Thay đổi username MySQL của bạn
     private static final String PASS = "12345678";     // Thay đổi password MySQL của bạn
 

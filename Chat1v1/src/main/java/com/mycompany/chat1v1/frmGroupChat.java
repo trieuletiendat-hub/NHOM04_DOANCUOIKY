@@ -77,12 +77,317 @@ private static final long MAX_FILE_SIZE =
         autoConnectGroup();
     }
 
-    private void setupUIState() {
-        setLocationRelativeTo(null);
-        setTitle("Group Chat Chung - " + username);
-        setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
-        lstMembers.setModel(memberModel);
+    
+
+private void setupModernGroupUI() {
+    Color primary = new Color(81, 70, 216);
+    Color primaryHover = new Color(67, 56, 202);
+    Color background = new Color(245, 246, 252);
+    Color white = Color.WHITE;
+    Color text = new Color(39, 42, 68);
+    Color muted = new Color(115, 120, 145);
+    Color border = new Color(225, 227, 240);
+    Color chatBackground = new Color(250, 250, 255);
+
+    Font normal = new Font("Segoe UI", Font.PLAIN, 14);
+    Font bold = new Font("Segoe UI", Font.BOLD, 14);
+
+    // Cấu hình cửa sổ
+    getContentPane().removeAll();
+    getContentPane().setLayout(new BorderLayout(0, 0));
+    getContentPane().setBackground(background);
+
+    // =========================
+    // 1. THANH TIÊU ĐỀ
+    // =========================
+    JPanel header = new JPanel(new BorderLayout(16, 0));
+    header.setBackground(white);
+    header.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createMatteBorder(0, 0, 1, 0, border),
+        new EmptyBorder(14, 22, 14, 22)
+    ));
+
+    JPanel brandPanel = new JPanel();
+    brandPanel.setLayout(new BoxLayout(brandPanel, BoxLayout.Y_AXIS));
+    brandPanel.setBackground(white);
+
+    jLabel1.setText("CHAT CONNECT");
+    jLabel1.setFont(new Font("Segoe UI", Font.BOLD, 21));
+    jLabel1.setForeground(primary);
+    jLabel1.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+    jLabel5.setText("Trò chuyện nhóm");
+    jLabel5.setFont(new Font("Segoe UI", Font.BOLD, 16));
+    jLabel5.setForeground(text);
+    jLabel5.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+    brandPanel.add(jLabel1);
+    brandPanel.add(Box.createVerticalStrut(4));
+    brandPanel.add(jLabel5);
+
+    JPanel connectionPanel = new JPanel(new FlowLayout(
+        FlowLayout.RIGHT, 8, 4
+    ));
+    connectionPanel.setBackground(white);
+
+    jLabel3.setText("Người dùng");
+    jLabel3.setForeground(muted);
+    jLabel3.setFont(normal);
+
+    jLabel2.setText("Server IP");
+    jLabel2.setForeground(muted);
+    jLabel2.setFont(normal);
+
+    txtUsername.setFont(normal);
+    txtHost.setFont(normal);
+    txtUsername.setPreferredSize(new Dimension(110, 34));
+    txtHost.setPreferredSize(new Dimension(135, 34));
+
+    styleTextField(txtUsername, text, border, white);
+    styleTextField(txtHost, text, border, white);
+
+    styleGroupButton(btnConnect, "Kết nối", primary, primaryHover);
+
+    connectionPanel.add(jLabel3);
+    connectionPanel.add(txtUsername);
+    connectionPanel.add(jLabel2);
+    connectionPanel.add(txtHost);
+    connectionPanel.add(btnConnect);
+
+    header.add(brandPanel, BorderLayout.WEST);
+    header.add(connectionPanel, BorderLayout.EAST);
+
+    // =========================
+    // 2. DANH SÁCH THÀNH VIÊN
+    // =========================
+    JPanel memberPanel = new JPanel(new BorderLayout(0, 12));
+    memberPanel.setBackground(white);
+    memberPanel.setPreferredSize(new Dimension(220, 100));
+    memberPanel.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(border),
+        new EmptyBorder(16, 14, 14, 14)
+    ));
+
+    jLabel4.setText("Thành viên trong nhóm");
+    jLabel4.setFont(bold);
+    jLabel4.setForeground(primary);
+
+    lstMembers.setModel(memberModel);
+    lstMembers.setFont(normal);
+    lstMembers.setForeground(text);
+    lstMembers.setBackground(white);
+    lstMembers.setSelectionBackground(new Color(232, 229, 255));
+    lstMembers.setSelectionForeground(primary);
+    lstMembers.setFixedCellHeight(38);
+    lstMembers.setBorder(new EmptyBorder(5, 5, 5, 5));
+
+    jScrollPane2.setBorder(BorderFactory.createEmptyBorder());
+    jScrollPane2.setViewportView(lstMembers);
+    jScrollPane2.getViewport().setBackground(white);
+
+    memberPanel.add(jLabel4, BorderLayout.NORTH);
+    memberPanel.add(jScrollPane2, BorderLayout.CENTER);
+
+    // =========================
+    // 3. KHUNG TRÒ CHUYỆN
+    // =========================
+    JPanel chatPanel = new JPanel(new BorderLayout(0, 12));
+    chatPanel.setBackground(white);
+    chatPanel.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(border),
+        new EmptyBorder(16, 16, 16, 16)
+    ));
+
+    JPanel chatHeader = new JPanel(new BorderLayout());
+    chatHeader.setBackground(white);
+
+    JLabel chatTitle = new JLabel("Phòng chat nhóm");
+    chatTitle.setFont(new Font("Segoe UI", Font.BOLD, 16));
+    chatTitle.setForeground(text);
+
+    lblStatus = new JLabel("Đang chờ kết nối...");
+    lblStatus.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+    lblStatus.setForeground(muted);
+
+    JPanel titlePanel = new JPanel();
+    titlePanel.setLayout(new BoxLayout(titlePanel, BoxLayout.Y_AXIS));
+    titlePanel.setBackground(white);
+    titlePanel.add(chatTitle);
+    titlePanel.add(Box.createVerticalStrut(4));
+    titlePanel.add(lblStatus);
+
+    chatHeader.add(titlePanel, BorderLayout.WEST);
+
+    txtChat.setEditable(false);
+    txtChat.setLineWrap(true);
+    txtChat.setWrapStyleWord(true);
+    txtChat.setFont(normal);
+    txtChat.setForeground(text);
+    txtChat.setBackground(chatBackground);
+    txtChat.setCaretColor(primary);
+    txtChat.setMargin(new Insets(14, 14, 14, 14));
+
+    jScrollPane3.setBorder(BorderFactory.createLineBorder(border));
+    jScrollPane3.setViewportView(txtChat);
+    jScrollPane3.getViewport().setBackground(chatBackground);
+
+    // =========================
+    // 4. THANH NHẬP TIN NHẮN
+    // =========================
+    JPanel inputPanel = new JPanel(new BorderLayout(10, 0));
+    inputPanel.setBackground(white);
+    inputPanel.setBorder(new EmptyBorder(4, 0, 0, 0));
+
+    txtMessage.setFont(normal);
+    txtMessage.setPreferredSize(new Dimension(100, 42));
+    txtMessage.setToolTipText("Nhập tin nhắn gửi đến cả nhóm");
+    styleTextField(txtMessage, text, border, white);
+
+    styleGroupButton(btnSend, "Gửi", primary, primaryHover);
+    styleGroupButton(
+        btnSendFile, "Đính kèm tệp",
+        new Color(56, 120, 210),
+        new Color(37, 99, 190)
+    );
+
+    JPanel actionPanel = new JPanel(new FlowLayout(
+        FlowLayout.RIGHT, 8, 0
+    ));
+    actionPanel.setBackground(white);
+    actionPanel.add(btnSendFile);
+    actionPanel.add(btnSend);
+
+    inputPanel.add(txtMessage, BorderLayout.CENTER);
+    inputPanel.add(actionPanel, BorderLayout.EAST);
+
+    chatPanel.add(chatHeader, BorderLayout.NORTH);
+    chatPanel.add(jScrollPane3, BorderLayout.CENTER);
+    chatPanel.add(inputPanel, BorderLayout.SOUTH);
+
+    // Nhấn Enter để gửi tin nhắn
+    txtMessage.addActionListener(e -> btnSend.doClick());
+
+    // =========================
+    // 5. GHÉP BỐ CỤC
+    // =========================
+    JPanel body = new JPanel(new BorderLayout(14, 0));
+    body.setBackground(background);
+    body.setBorder(new EmptyBorder(16, 18, 18, 18));
+
+    body.add(memberPanel, BorderLayout.WEST);
+    body.add(chatPanel, BorderLayout.CENTER);
+
+    getContentPane().add(header, BorderLayout.NORTH);
+    getContentPane().add(body, BorderLayout.CENTER);
+
+    setMinimumSize(new Dimension(850, 560));
+    setSize(1050, 680);
+
+    revalidate();
+    repaint();
+}
+
+private void styleTextField(
+        JTextField field,
+        Color foreground,
+        Color borderColor,
+        Color background) {
+
+    field.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+    field.setForeground(foreground);
+    field.setBackground(background);
+    field.setCaretColor(new Color(81, 70, 216));
+    field.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(borderColor),
+        new EmptyBorder(7, 10, 7, 10)
+    ));
+}
+
+
+private void styleGroupButton(
+        JButton button,
+        String title,
+        Color normalColor,
+        Color hoverColor) {
+
+    button.setText(title);
+    button.setFont(new Font("Segoe UI", Font.BOLD, 13));
+    button.setForeground(Color.WHITE);
+    button.setBackground(normalColor);
+    button.setOpaque(true);
+    button.setContentAreaFilled(true);
+    button.setBorderPainted(false);
+    button.setFocusPainted(false);
+    button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+    button.setBorder(
+        BorderFactory.createEmptyBorder(9, 16, 9, 16)
+    );
+
+    // Tránh đăng ký nhiều bộ sự kiện khi hàm được gọi lại
+    for (MouseListener listener : button.getMouseListeners()) {
+        if (listener instanceof GroupButtonHoverListener) {
+            button.removeMouseListener(listener);
+        }
     }
+
+    button.addMouseListener(
+        new GroupButtonHoverListener(button, normalColor, hoverColor)
+    );
+}
+
+private static class GroupButtonHoverListener extends MouseAdapter {
+    private final JButton button;
+    private final Color normalColor;
+    private final Color hoverColor;
+
+    GroupButtonHoverListener(
+            JButton button,
+            Color normalColor,
+            Color hoverColor) {
+        this.button = button;
+        this.normalColor = normalColor;
+        this.hoverColor = hoverColor;
+    }
+
+    @Override
+    public void mouseEntered(MouseEvent e) {
+        if (button.isEnabled()) {
+            button.setBackground(hoverColor);
+        }
+    }
+
+    @Override
+    public void mouseExited(MouseEvent e) {
+        button.setBackground(normalColor);
+    }
+}
+
+    
+private void setupUIState() {
+    setTitle("Chat Connect - Trò chuyện nhóm");
+    setDefaultCloseOperation(
+        javax.swing.WindowConstants.DISPOSE_ON_CLOSE
+    );
+
+    // Kích thước và vị trí cửa sổ
+    setSize(950, 620);
+    setMinimumSize(new Dimension(800, 520));
+    setLocationRelativeTo(null);
+
+    // Danh sách thành viên
+    lstMembers.setModel(memberModel);
+
+    // Áp dụng giao diện đồng bộ Chat Connect
+    setupModernGroupUI();
+
+    // Trạng thái ban đầu
+    btnSend.setEnabled(false);
+    btnSendFile.setEnabled(false);
+
+    txtChat.setEditable(false);
+    txtChat.setLineWrap(true);
+    txtChat.setWrapStyleWord(true);
+}
 
     private void autoConnectGroup() {
         Thread thread = new Thread(() -> {
@@ -107,9 +412,16 @@ private static final long MAX_FILE_SIZE =
                 connected = true;
 
                 SwingUtilities.invokeLater(() -> {
-                    btnSend.setEnabled(true);
-                    appendMessage("[SYSTEM] Đã tự động tham gia Group Chat thành công!");
-                });
+            btnSend.setEnabled(true);
+            btnSendFile.setEnabled(true);
+
+            if (lblStatus != null) {
+                lblStatus.setText("Đã kết nối • " + host);
+                lblStatus.setForeground(new Color(22, 163, 74));
+            }
+
+            appendMessage("[SYSTEM] Đã kết nối phòng chat nhóm.");
+        });
 
                 startFileReceiver(host);
 
@@ -379,15 +691,22 @@ private static final long MAX_FILE_SIZE =
             connected = true;
 
             SwingUtilities.invokeLater(() -> {
-                btnConnect.setEnabled(false);
-                btnSend.setEnabled(true);
-                txtHost.setEnabled(false);
-                txtUsername.setEnabled(false);
+    btnConnect.setEnabled(false);
+    btnSend.setEnabled(true);
+    btnSendFile.setEnabled(true);
+    txtHost.setEnabled(false);
+    txtUsername.setEnabled(false);
 
-                appendMessage("[SYSTEM] Đã kết nối Server: " + host);
+    if (lblStatus != null) {
+        lblStatus.setText("Đã kết nối • " + host);
+        lblStatus.setForeground(new Color(22, 163, 74));
+    }
+
+    appendMessage("[SYSTEM] Đã kết nối Server: " + host);
             startFileReceiver(host);
-            });
-            startFileReceiver(host);
+});
+
+startFileReceiver(host);
 
            
 String message;
