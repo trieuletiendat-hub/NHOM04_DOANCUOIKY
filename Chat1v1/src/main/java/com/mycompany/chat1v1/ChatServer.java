@@ -94,10 +94,10 @@ public class ChatServer {
                 out.println("OK|Dang nhap thanh cong voi ten " + username);
 
                 Database.registerUser(username);
-                out.println("INFO|Phong chat chung da san sang. Nhap tin nhan de gui cho tat ca.");
-                out.println("INFO|Cu phap gui file: @file tenNguoiNhan tenFile kichThuocBytes");
-                out.println("INFO|Nhap /users de xem danh sach nguoi dung.");
-                out.println("INFO|Nhap /quit de thoat.");
+                //out.println("INFO|Phong chat chung da san sang. Nhap tin nhan de gui cho tat ca.");
+                //out.println("INFO|Cu phap gui file: @file tenNguoiNhan tenFile kichThuocBytes");
+                //out.println("INFO|Nhap /users de xem danh sach nguoi dung.");
+                //out.println("INFO|Nhap /quit de thoat.");
 
                 System.out.println(username + " da dang nhap.");
                 broadcastUserList();

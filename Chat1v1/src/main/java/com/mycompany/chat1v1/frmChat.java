@@ -68,7 +68,7 @@ private String currentSelectedUser = null;
         setDefaultCloseOperation(
             javax.swing.WindowConstants.DO_NOTHING_ON_CLOSE);
 
-        lblCurrentUser.setText("Đăng nhập: " + username);
+        lblCurrentUser.setText("Người dùng: " + username);
         lblStatus.setText("Đã kết nối");
         txtChat.setEditable(false);
         txtChat.setLineWrap(true);
@@ -76,8 +76,8 @@ private String currentSelectedUser = null;
 
         lstUsers.setModel(userModel);
 
-        appendMessage("[Hệ thống] " + loginMessage);
-        appendMessage("[Hệ thống] Chọn người nhận rồi nhập tin nhắn.");
+        //appendMessage("[Hệ thống] " + loginMessage);
+        //appendMessage("[Hệ thống] Chọn người nhận rồi nhập tin nhắn.");
 
         btnSend.addActionListener(e -> sendMessage());
         txtMessage.addActionListener(e -> sendMessage());
@@ -193,6 +193,9 @@ private String currentSelectedUser = null;
         styleButton(btnSendFile, "Gửi file",
             new java.awt.Color(56, 120, 210),
             new java.awt.Color(75, 140, 230), white);
+        
+        styleButton(btnJoinGroup, "Tham gia nhóm",
+            primary, primaryHover, white);
 
         styleButton(btnRefresh, "Làm mới",
             new java.awt.Color(231, 228, 255),
@@ -210,26 +213,32 @@ private String currentSelectedUser = null;
             return user2 + "_" + user1;
         }
     }
+
 private void switchChatTarget(String newUser) {
-        currentSelectedUser = newUser;
-        txtChat.setText(""); // Xóa sạch khung hiển thị trước đó
+    currentSelectedUser = newUser;
 
-        if (newUser == null) {
-            return;
-        }
+    // Xóa nội dung cuộc trò chuyện đang hiển thị.
+    txtChat.setText("");
 
-        // Lấy khóa hội thoại riêng giữa bạn (username) và người được chọn (newUser)
-        String chatKey = getChatKey(username, newUser);
-
-        // Nếu đã có lịch sử trò chuyện trước đó thì hiển thị lên, ngược lại để trống
-        if (privateHistories.containsKey(chatKey)) {
-            txtChat.setText(privateHistories.get(chatKey).toString());
-        } else {
-            appendMessage("[Hệ thống] Bắt đầu cuộc trò chuyện riêng tư với " + newUser);
-        }
-
-        txtChat.setCaretPosition(txtChat.getDocument().getLength());
+    if (newUser == null || newUser.trim().isEmpty()) {
+        lblConversation.setText("Nội dung hội thoại");
+        return;
     }
+
+    lblConversation.setText("Trò chuyện với " + newUser);
+
+    String chatKey = getChatKey(username, newUser);
+    StringBuilder history = privateHistories.get(chatKey);
+
+    // Hiển thị lại lịch sử đúng của người được chọn.
+    if (history != null && history.length() > 0) {
+        txtChat.setText(history.toString());
+    }
+
+    txtChat.setCaretPosition(txtChat.getDocument().getLength());
+    txtMessage.requestFocusInWindow();
+}
+
     // Định dạng nút và tạo hiệu ứng khi rê chuột
     private void styleButton(
         javax.swing.JButton button,
@@ -407,112 +416,158 @@ private void switchChatTarget(String newUser) {
         return f;
     }
 
-    private void processMessage(String incoming) {
-        String[] parts = incoming.split("\\|", 4);
+private void processMessage(String incoming) {
+    String[] parts = incoming.split("\\|", 4);
 
-        switch (parts[0]) {
-            case "MSG":
-                if (parts.length >= 3) {
-                    String sender = parts[1];
-                    String encryptedContent = parts[2];
-                    String decryptedContent = encryptedContent;
+    switch (parts[0]) {
+        case "MSG":
+            if (parts.length >= 3) {
+                String sender = parts[1];
+                String encryptedContent = parts[2];
+                String content;
 
-                    try {
-                        byte[] decodedBytes = java.util.Base64.getDecoder().decode(encryptedContent);
-                        decryptedContent = new String(decodedBytes, java.nio.charset.StandardCharsets.UTF_8);
-                    } catch (IllegalArgumentException e) {
-                        decryptedContent = encryptedContent;
-                    }
-
-                    String formattedMsg = "[" + sender + "] " + decryptedContent;
-                    
-                    // Xác định khóa lịch sử của người gửi tin nhắn này với bạn
-                    String chatKey = getChatKey(username, sender);
-                    
-                    // Lưu ngầm vào lịch sử riêng tư của cặp đôi này
-                    privateHistories.putIfAbsent(chatKey, new StringBuilder());
-                    privateHistories.get(chatKey).append(formattedMsg).append("\n");
-
-                    // NẾU BẠN ĐANG MỞ KHUNG CHAT VỚI CHÍNH NGƯỜI GỬI NÀY THÌ MỚI HIỂN THỊ LÊN MÀN HÌNH
-                    if (sender.equals(currentSelectedUser)) {
-                        txtChat.append(formattedMsg + "\n");
-                        txtChat.setCaretPosition(txtChat.getDocument().getLength());
-                    }
+                try {
+                    byte[] decoded = java.util.Base64.getDecoder()
+                            .decode(encryptedContent);
+                    content = new String(
+                            decoded,
+                            java.nio.charset.StandardCharsets.UTF_8
+                    );
+                } catch (IllegalArgumentException e) {
+                    content = encryptedContent;
                 }
-                break;
 
-            case "INFO":
-                if (parts.length >= 2) {
-                    String info = parts[1];
-                    String prefix = "Nguoi dung dang online: ";
-
-                    if (info.startsWith(prefix)) {
-                        updateUsers(info.substring(prefix.length()));
-                    } else {
-                        appendMessage("[Hệ thống] " + info);
-                    }
+                // Không nhận và hiển thị tin nhắn của chính mình
+                // trong nhánh xử lý tin nhắn đến.
+                if (sender.equals(username)) {
+                    break;
                 }
-                break;
 
-            case "SENT":
-                if (parts.length >= 2) {
-                    appendMessage("[Hệ thống] " + parts[1]);
+                String chatKey = getChatKey(username, sender);
+                String formattedMsg = "[" + sender + "] : " + content;
+
+                privateHistories.putIfAbsent(
+                        chatKey, new StringBuilder()
+                );
+                privateHistories.get(chatKey)
+                        .append(formattedMsg)
+                        .append("\n");
+
+                // Chỉ hiển thị nếu đang mở đúng cuộc trò chuyện.
+                if (sender.equals(currentSelectedUser)) {
+                    txtChat.append(formattedMsg + "\n");
+                    txtChat.setCaretPosition(
+                            txtChat.getDocument().getLength()
+                    );
                 }
-                break;
+            }
+            break;
 
-            case "ERROR":
-                appendMessage("[Lỗi] " + (parts.length >= 2 ? parts[1] : incoming));
-                break;
+        case "INFO":
+            if (parts.length >= 2) {
+                String info = parts[1];
+                String prefix1 = "Nguoi dung dang online: ";
+                String prefix2 = "Người dùng đang online: ";
 
-            default:
-                appendMessage(incoming);
-        }
-    }
-    private void sendMessage() {
-        String content = txtMessage.getText().trim();
+                if (info.startsWith(prefix1)) {
+                    updateUsers(info.substring(prefix1.length()));
+                } else if (info.startsWith(prefix2)) {
+                    updateUsers(info.substring(prefix2.length()));
+                } else {
+                    lblStatus.setText(info);
+                }
+            }
+            break;
 
-        if (content.isEmpty()) {
-            return;
-        }
+        case "SENT":
+            // Thông báo gửi file không được đưa nhầm vào hội thoại
+            // với người đang chọn.
+            lblStatus.setText(parts.length >= 2
+                    ? parts[1] : "Đã gửi tệp");
+            break;
 
-        String receiver = lstUsers.getSelectedValue();
-
-        if (receiver == null) {
+        case "ERROR":
             javax.swing.JOptionPane.showMessageDialog(
-                this, "Vui lòng chọn người nhận trước khi gửi.");
-            return;
-        }
+                    this,
+                    parts.length >= 2 ? parts[1] : incoming,
+                    "Thông báo",
+                    javax.swing.JOptionPane.WARNING_MESSAGE
+            );
+            break;
 
-        if (receiver.equals(username)) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this, "Bạn không thể gửi tin nhắn cho chính mình.");
-            return;
-        }
-
-        boolean failed;
-        synchronized (sendLock) {
-            out.println("@" + receiver + " " + content);
-            failed = out.checkError();
-        }
-
-        if (failed) {
-            appendMessage("[Lỗi] Không gửi được tin nhắn.");
-            return;
-        }
-
-        String myMsg = "[Bạn → " + receiver + "] " + content;
-        
-        // Lưu tin nhắn bạn gửi vào lịch sử riêng tư giữa bạn và người nhận
-        String chatKey = getChatKey(username, receiver);
-        privateHistories.putIfAbsent(chatKey, new StringBuilder());
-        privateHistories.get(chatKey).append(myMsg).append("\n");
-
-        // Hiển thị lên màn hình chat hiện tại
-        appendMessage(myMsg);
-        
-        txtMessage.setText("");
-        txtMessage.requestFocus();
+        default:
+            lblStatus.setText(incoming);
+            break;
     }
+}
+
+    
+private void sendMessage() {
+    String content = txtMessage.getText().trim();
+
+    if (content.isEmpty()) {
+        return;
+    }
+
+    String receiver = currentSelectedUser;
+
+    if (receiver == null || receiver.isEmpty()) {
+        JOptionPane.showMessageDialog(
+                this, "Vui lòng chọn người dùng để trò chuyện."
+        );
+        return;
+    }
+
+    if (receiver.equals(username)) {
+        JOptionPane.showMessageDialog(
+                this, "Bạn không thể gửi tin nhắn cho chính mình."
+        );
+        return;
+    }
+
+    if (out == null || socket == null || socket.isClosed()) {
+        JOptionPane.showMessageDialog(
+                this, "Kết nối đến server không còn hoạt động."
+        );
+        return;
+    }
+
+    boolean failed;
+
+    synchronized (sendLock) {
+        out.println("@" + receiver + " " + content);
+        out.flush();
+        failed = out.checkError();
+    }
+
+    if (failed) {
+        JOptionPane.showMessageDialog(
+                this, "Không gửi được tin nhắn."
+        );
+        return;
+    }
+
+    String chatKey = getChatKey(username, receiver);
+    String myMsg = "[" + username + "] : " + content;
+
+    privateHistories.putIfAbsent(
+            chatKey, new StringBuilder()
+    );
+    privateHistories.get(chatKey)
+            .append(myMsg)
+            .append("\n");
+
+    // Chỉ hiển thị tại đúng cuộc trò chuyện đang mở.
+    if (receiver.equals(currentSelectedUser)) {
+        txtChat.append(myMsg + "\n");
+        txtChat.setCaretPosition(
+                txtChat.getDocument().getLength()
+        );
+    }
+
+    txtMessage.setText("");
+    txtMessage.requestFocusInWindow();
+}
 
     public void refreshUsers() {
         if (socket != null && !socket.isClosed()) {
@@ -521,35 +576,42 @@ private void switchChatTarget(String newUser) {
     }
 
     
-    private void updateUsers(String onlineUsers) {
-        String selected = lstUsers.getSelectedValue();
+    
+private void updateUsers(String onlineUsers) {
+    String selected = currentSelectedUser;
 
-        userModel.clear();
+    userModel.clear();
 
-        int totalOnline = 0;
+    int totalOnline = 0;
 
-        if (onlineUsers != null && !onlineUsers.trim().isEmpty()) {
-            String[] names = onlineUsers.split(",");
+    if (onlineUsers != null && !onlineUsers.trim().isEmpty()) {
+        String[] names = onlineUsers.split(",");
 
-            for (String name : names) {
-                String trimmed = name.trim();
+        for (String name : names) {
+            String trimmed = name.trim();
 
-                if (!trimmed.isEmpty()) {
-                    totalOnline++;
+            if (!trimmed.isEmpty()) {
+                totalOnline++;
 
-                    if (!trimmed.equals(username)) {
-                        userModel.addElement(trimmed);
-                    }
+                if (!trimmed.equals(username)) {
+                    userModel.addElement(trimmed);
                 }
             }
         }
-
-        if (selected != null) {
-            lstUsers.setSelectedValue(selected, true);
-        }
-
-        lblStatus.setText("Đã kết nối | Online: " + totalOnline);
     }
+
+    // Khôi phục lựa chọn nếu người đó vẫn còn online.
+    if (selected != null && userModel.contains(selected)) {
+        lstUsers.setSelectedValue(selected, true);
+    } else {
+        currentSelectedUser = null;
+        lstUsers.clearSelection();
+        txtChat.setText("");
+        lblConversation.setText("Nội dung hội thoại");
+    }
+
+    lblStatus.setText("Đã kết nối | Online: " + totalOnline);
+}
 
 
     private void appendMessage(String message) {
@@ -652,13 +714,17 @@ private void switchChatTarget(String newUser) {
         btnSend.setFont(new java.awt.Font("Segoe UI", 0, 14)); // NOI18N
         btnSend.setText("Gửi");
 
+        btnSendFile.setBackground(new java.awt.Color(51, 255, 204));
         btnSendFile.setText("File");
+        btnSendFile.setMaximumSize(new java.awt.Dimension(72, 27));
+        btnSendFile.setMinimumSize(new java.awt.Dimension(72, 27));
         btnSendFile.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 btnSendFileActionPerformed(evt);
             }
         });
 
+        btnJoinGroup.setBackground(new java.awt.Color(255, 51, 255));
         btnJoinGroup.setText("Tham gia nhóm");
         btnJoinGroup.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
@@ -686,14 +752,14 @@ private void switchChatTarget(String newUser) {
                                 .addGap(41, 41, 41)
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                                     .addGroup(layout.createSequentialGroup()
-                                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                            .addGroup(layout.createSequentialGroup()
-                                                .addComponent(txtMessage, javax.swing.GroupLayout.DEFAULT_SIZE, 301, Short.MAX_VALUE)
-                                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                                .addComponent(btnSend)
-                                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                                .addComponent(btnSendFile))
-                                            .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 441, javax.swing.GroupLayout.PREFERRED_SIZE))
+                                        .addComponent(txtMessage, javax.swing.GroupLayout.DEFAULT_SIZE, 338, Short.MAX_VALUE)
+                                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                        .addComponent(btnSend, javax.swing.GroupLayout.PREFERRED_SIZE, 72, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                        .addComponent(btnSendFile, javax.swing.GroupLayout.PREFERRED_SIZE, 82, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                        .addContainerGap())
+                                    .addGroup(layout.createSequentialGroup()
+                                        .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 441, javax.swing.GroupLayout.PREFERRED_SIZE)
                                         .addGap(16, 16, 16))
                                     .addGroup(layout.createSequentialGroup()
                                         .addComponent(lblConversation)
@@ -723,7 +789,9 @@ private void switchChatTarget(String newUser) {
                     .addGroup(layout.createSequentialGroup()
                         .addGap(14, 14, 14)
                         .addComponent(lblTitle))
-                    .addComponent(btnLogout))
+                    .addGroup(layout.createSequentialGroup()
+                        .addContainerGap()
+                        .addComponent(btnLogout)))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(lblCurrentUser)
@@ -740,12 +808,18 @@ private void switchChatTarget(String newUser) {
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                     .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 170, Short.MAX_VALUE)
                     .addComponent(jScrollPane2))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(btnRefresh)
-                    .addComponent(txtMessage, javax.swing.GroupLayout.PREFERRED_SIZE, 40, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(btnSend)
-                    .addComponent(btnSendFile))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                    .addGroup(layout.createSequentialGroup()
+                        .addComponent(btnSend, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addGap(7, 7, 7))
+                    .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(btnRefresh)
+                            .addComponent(txtMessage, javax.swing.GroupLayout.PREFERRED_SIZE, 40, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGroup(layout.createSequentialGroup()
+                            .addComponent(btnSendFile, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                            .addGap(8, 8, 8))))
                 .addGap(16, 16, 16))
         );
 
