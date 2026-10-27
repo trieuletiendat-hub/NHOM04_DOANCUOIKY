@@ -119,7 +119,21 @@ public class ChatServer {
                         continue;
                     }
 
-                    broadcastChatMessage(message);
+                    // XỬ LÝ TIN NHẮN RIÊNG TƯ THEO CÚ PHÁP: @receiver nội_dung
+                    if (message.startsWith("@")) {
+                        int spaceIdx = message.indexOf(" ");
+                        if (spaceIdx != -1) {
+                            String receiverName = message.substring(1, spaceIdx).trim();
+                            String content = message.substring(spaceIdx + 1).trim();
+                            
+                            handlePrivateMessage(receiverName, content);
+                        } else {
+                            out.println("ERROR|Sai cú pháp tin nhắn riêng.");
+                        }
+                        continue;
+                    }
+
+                    // Nếu không phải cú pháp trên thì có thể coi là thông điệp chung (nếu muốn giữ lại) hoặc bỏ qua
                 }
 
             } catch (IOException e) {
@@ -141,7 +155,33 @@ public class ChatServer {
                 }
             }
         }
-        
+        private void handlePrivateMessage(String receiverName, String content) {
+            if (content.isEmpty()) {
+                return;
+            }
+
+            if (receiverName.equals(username)) {
+                out.println("ERROR|Bạn không thể gửi tin nhắn cho chính mình.");
+                return;
+            }
+
+            ClientHandler receiverClient = clients.get(receiverName);
+            if (receiverClient == null) {
+                out.println("ERROR|Người dùng " + receiverName + " không online.");
+                return;
+            }
+
+            // Mã hóa nội dung tin nhắn sang Base64 trước khi truyền và lưu DB
+            String encryptedContent = Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8));
+
+            // CHỈ GỬI RIÊNG ĐÚNG CHO NGƯỜI NHẬN (Không broadcast cho người khác)
+            receiverClient.send("MSG|" + username + "|" + encryptedContent);
+
+            // Lưu vào Database với đúng tên người nhận cụ thể
+            Database.saveMessage(username, receiverName, encryptedContent);
+
+            System.out.println("[" + username + " -> " + receiverName + "]: " + encryptedContent);
+        }
         private void send(String line) {
             synchronized (writeLock) {
                 out.println(line);

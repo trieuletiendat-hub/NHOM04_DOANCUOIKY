@@ -30,6 +30,9 @@ public class frmChat extends javax.swing.JFrame {
     private boolean closing = false;
     // Khóa để tin nhắn và file không bị ghi xen kẽ vào cùng một socket
     private final Object sendLock = new Object();
+
+private final java.util.Map<String, StringBuilder> privateHistories = new java.util.HashMap<>();
+private String currentSelectedUser = null;
     /**
      * Creates new form frmChat
      */
@@ -127,6 +130,15 @@ public class frmChat extends javax.swing.JFrame {
         lblConversation.setFont(new java.awt.Font(
             "Segoe UI", java.awt.Font.BOLD, 13));
         lblConversation.setForeground(text);
+        // Lắng nghe sự kiện khi người dùng click chọn tên trong danh sách online
+        lstUsers.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                String selectedUser = lstUsers.getSelectedValue();
+                if (selectedUser != null && !selectedUser.equals(currentSelectedUser)) {
+                    switchChatTarget(selectedUser);
+                }
+            }
+        });
 
     // ===== DANH SÁCH NGƯỜI DÙNG =====
         lstUsers.setFont(new java.awt.Font(
@@ -190,7 +202,34 @@ public class frmChat extends javax.swing.JFrame {
             new java.awt.Color(220, 75, 95),
             new java.awt.Color(195, 55, 78), white);
     }
+    private String getChatKey(String user1, String user2) {
+        // Sắp xếp tên theo bảng chữ cái để đảm bảo (A chat với B) giống với (B chat với A)
+        if (user1.compareTo(user2) < 0) {
+            return user1 + "_" + user2;
+        } else {
+            return user2 + "_" + user1;
+        }
+    }
+private void switchChatTarget(String newUser) {
+        currentSelectedUser = newUser;
+        txtChat.setText(""); // Xóa sạch khung hiển thị trước đó
 
+        if (newUser == null) {
+            return;
+        }
+
+        // Lấy khóa hội thoại riêng giữa bạn (username) và người được chọn (newUser)
+        String chatKey = getChatKey(username, newUser);
+
+        // Nếu đã có lịch sử trò chuyện trước đó thì hiển thị lên, ngược lại để trống
+        if (privateHistories.containsKey(chatKey)) {
+            txtChat.setText(privateHistories.get(chatKey).toString());
+        } else {
+            appendMessage("[Hệ thống] Bắt đầu cuộc trò chuyện riêng tư với " + newUser);
+        }
+
+        txtChat.setCaretPosition(txtChat.getDocument().getLength());
+    }
     // Định dạng nút và tạo hiệu ứng khi rê chuột
     private void styleButton(
         javax.swing.JButton button,
@@ -378,17 +417,27 @@ public class frmChat extends javax.swing.JFrame {
                     String encryptedContent = parts[2];
                     String decryptedContent = encryptedContent;
 
-                    // Tiến hành giải mã Base64 sang văn bản thường tiếng Việt (UTF-8)
                     try {
                         byte[] decodedBytes = java.util.Base64.getDecoder().decode(encryptedContent);
                         decryptedContent = new String(decodedBytes, java.nio.charset.StandardCharsets.UTF_8);
                     } catch (IllegalArgumentException e) {
-                        // Nếu nội dung không phải mã hóa Base64 thì giữ nguyên bản gốc
                         decryptedContent = encryptedContent;
                     }
 
-                    // Hiển thị nội dung đã giải mã lên khung chat
-                    appendMessage("[" + sender + "] " + decryptedContent);
+                    String formattedMsg = "[" + sender + "] " + decryptedContent;
+                    
+                    // Xác định khóa lịch sử của người gửi tin nhắn này với bạn
+                    String chatKey = getChatKey(username, sender);
+                    
+                    // Lưu ngầm vào lịch sử riêng tư của cặp đôi này
+                    privateHistories.putIfAbsent(chatKey, new StringBuilder());
+                    privateHistories.get(chatKey).append(formattedMsg).append("\n");
+
+                    // NẾU BẠN ĐANG MỞ KHUNG CHAT VỚI CHÍNH NGƯỜI GỬI NÀY THÌ MỚI HIỂN THỊ LÊN MÀN HÌNH
+                    if (sender.equals(currentSelectedUser)) {
+                        txtChat.append(formattedMsg + "\n");
+                        txtChat.setCaretPosition(txtChat.getDocument().getLength());
+                    }
                 }
                 break;
 
@@ -435,9 +484,9 @@ public class frmChat extends javax.swing.JFrame {
         }
 
         if (receiver.equals(username)) {
-        javax.swing.JOptionPane.showMessageDialog(
+            javax.swing.JOptionPane.showMessageDialog(
                 this, "Bạn không thể gửi tin nhắn cho chính mình.");
-        return;
+            return;
         }
 
         boolean failed;
@@ -451,7 +500,16 @@ public class frmChat extends javax.swing.JFrame {
             return;
         }
 
-        appendMessage("[Bạn → " + receiver + "] " + content);
+        String myMsg = "[Bạn → " + receiver + "] " + content;
+        
+        // Lưu tin nhắn bạn gửi vào lịch sử riêng tư giữa bạn và người nhận
+        String chatKey = getChatKey(username, receiver);
+        privateHistories.putIfAbsent(chatKey, new StringBuilder());
+        privateHistories.get(chatKey).append(myMsg).append("\n");
+
+        // Hiển thị lên màn hình chat hiện tại
+        appendMessage(myMsg);
+        
         txtMessage.setText("");
         txtMessage.requestFocus();
     }
